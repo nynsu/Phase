@@ -38,4 +38,4 @@ Extensão para o **Autodesk Revit** desenvolvida para o ecossistema **pyRevit**,
 
 ## 📄 Licença
 
-Este projeto está sob a licença MIT - consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
+Este projeto está licenciado sob a **GNU General Public License v3.0 (GPLv3)** - consulte o arquivo [LICENSE](LICENSE) para mais detalhes. Qualquer projeto derivado deve manter a atribuição de autoria e permanecer sob código aberto.
