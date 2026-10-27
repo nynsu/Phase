@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/assets/banner.png" alt="Phase Banner" width="100%">
+</p>
+
 # Phase
 
 Extensão para o **Autodesk Revit** desenvolvida para o ecossistema **pyRevit**, com foco em automação, cálculo e produtividade para projetos de instalações elétricas prediais e industriais.
