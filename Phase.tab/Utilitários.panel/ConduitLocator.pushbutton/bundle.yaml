@@ -1,0 +1,6 @@
+title: "ConduitLocator"
+tooltip: "Classifica automaticamente os eletrodutos (Sobreposto, Enterrado, Embutido na Laje ou Parede) com base na altura da laje definida pelo usuário."
+author: "Nynsu"
+help_url: ""
+context:
+  - doc-project

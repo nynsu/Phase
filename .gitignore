@@ -1,0 +1,20 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# pyRevit / Revit temp and log files
+*.log
+.temp/
+
+# Pasta privada / em desenvolvimento ignorada
+**/WireMaster.pushbutton/
+WireMaster.pushbutton/
+
+# Arquivos de sistema e editores
+.DS_Store
+Thumbs.db
+*.suo
+*.user
+.idea/
+.vscode/
