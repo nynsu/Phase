@@ -1,0 +1,801 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Locação de conduíte"
+        Width="1120" SizeToContent="Height" MinWidth="920" MinHeight="320"
+        WindowStartupLocation="CenterScreen" ResizeMode="CanResizeWithGrip"
+        FontFamily="Segoe UI" FontSize="12" Foreground="#1E2A38"
+        Background="#F4F6F9">
+
+    <Window.Resources>
+
+        <!-- ================= BOTÕES ================= -->
+        <!-- Secundário (padrão de todo botão sem Style): Fechar, Cancelar, Desfazer, auxiliares -->
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="MinHeight" Value="26"/>
+            <Setter Property="Background" Value="#F4F6F8"/>
+            <Setter Property="BorderBrush" Value="#B9C1CC"/>
+            <Setter Property="Foreground" Value="#222933"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E3E8EE"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#1F5FA8"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#D5DCE5"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="Secundario" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"/>
+
+        <!-- Principal (azul): ação padrão, botão da aba (nome da ação), "Fazer selecionados", "Aplicar" -->
+        <Style x:Key="Principal" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Padding" Value="14,5"/>
+            <Setter Property="MinHeight" Value="30"/>
+            <Setter Property="Background" Value="#1F5FA8"/>
+            <Setter Property="BorderBrush" Value="#1F5FA8"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#184C87"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#184C87"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#123A68"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Verde: confirmar ou adicionar algo -->
+        <Style x:Key="Verde" TargetType="Button" BasedOn="{StaticResource Principal}">
+            <Setter Property="Background" Value="#1E7B4A"/>
+            <Setter Property="BorderBrush" Value="#1E7B4A"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#17633B"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#17633B"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#114B2D"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Vermelho: só para apagar, limpar ou remover (gravar ou criar em lote fica azul, mesmo com confirmação) -->
+        <Style x:Key="Vermelho" TargetType="Button" BasedOn="{StaticResource Principal}">
+            <Setter Property="Background" Value="#A93232"/>
+            <Setter Property="BorderBrush" Value="#A93232"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#8C2828"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#8C2828"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#6E1F1F"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ================= ABAS ================= -->
+        <Style TargetType="TabItem">
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Bd" Background="#E9ECF0" BorderBrush="#C9D2DE" BorderThickness="1,1,1,0"
+                                CornerRadius="4,4,0,0" Padding="14,6" Margin="0,0,3,0">
+                            <ContentPresenter x:Name="Hd" ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              TextElement.Foreground="#1E2A38"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsMouseOver" Value="True"/>
+                                    <Condition Property="IsSelected" Value="False"/>
+                                </MultiTrigger.Conditions>
+                                <Setter TargetName="Bd" Property="Background" Value="#DDE2E8"/>
+                            </MultiTrigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1F5FA8"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#1F5FA8"/>
+                                <Setter TargetName="Hd" Property="TextElement.Foreground" Value="White"/>
+                                <Setter TargetName="Hd" Property="TextElement.FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                            <!-- aba que não se aplica (IsEnabled=False): cinza mais escuro, texto apagado em itálico.
+                                 No código: título + " (não se aplica a esta vista)" e ToolTipService.SetShowOnDisabled(aba, True) -->
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Background" Value="#C9CFD7"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#B9C1CC"/>
+                                <Setter TargetName="Hd" Property="TextElement.Foreground" Value="#6B7684"/>
+                                <Setter TargetName="Hd" Property="TextElement.FontStyle" Value="Italic"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="TabControl">
+            <Setter Property="BorderBrush" Value="#1F5FA8"/>
+            <Setter Property="BorderThickness" Value="0,2,0,0"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+
+        <!-- ================= CAMPOS ================= -->
+        <!-- TextBox: borda azul só com foco -->
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Padding" Value="3,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#ABB4C0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" SnapsToDevicePixels="True">
+                            <ScrollViewer x:Name="PART_ContentHost" Focusable="False"
+                                          HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#1F5FA8"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ComboBox (também funciona com IsEditable="True") -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" Padding="6,3">
+                            <ContentPresenter x:Name="Ct" TextElement.Foreground="#1E2A38"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E9ECF0"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1F5FA8"/>
+                                <Setter TargetName="Ct" Property="TextElement.Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Foreground" Value="#1E2A38"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton Focusable="False" ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Bd" Background="White" BorderBrush="#ABB4C0" BorderThickness="1" CornerRadius="2">
+                                            <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                  Data="M0,0 L4,4 L8,0 Z" Fill="#5A6778"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="BorderBrush" Value="#1F5FA8"/>
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Bd" Property="BorderBrush" Value="#1F5FA8"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="Ct" IsHitTestVisible="False" Margin="6,3,24,3"
+                                              VerticalAlignment="Center" HorizontalAlignment="Left"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"/>
+                            <TextBox x:Name="PART_EditableTextBox" Visibility="Collapsed" Margin="1,1,22,1"
+                                     Background="Transparent" BorderThickness="0" MinHeight="0"
+                                     IsReadOnly="{TemplateBinding IsReadOnly}"/>
+                            <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True" Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}" PopupAnimation="Slide">
+                                <Border Background="White" BorderBrush="#ABB4C0" BorderThickness="1"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <ScrollViewer>
+                                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="Ct" Property="Visibility" Value="Hidden"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- CheckBox: caixa azul com ✓ branco; traço quando parcial (três estados) -->
+        <Style TargetType="CheckBox">
+            <Setter Property="Margin" Value="0,2,10,2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <Border x:Name="Box" Width="15" Height="15" Background="White" BorderBrush="#8C96A3"
+                                    BorderThickness="1" CornerRadius="2" VerticalAlignment="Center">
+                                <Grid>
+                                    <Path x:Name="Mark" Data="M2.5,7 L5.5,10 L11,3.5" Stroke="White" StrokeThickness="2" Visibility="Collapsed"/>
+                                    <Rectangle x:Name="Dash" Width="7" Height="2" Fill="White" Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                            <ContentPresenter x:Name="Ct" Margin="6,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasContent" Value="False">
+                                <Setter TargetName="Ct" Property="Margin" Value="0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#1F5FA8"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box" Property="Background" Value="#1F5FA8"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#1F5FA8"/>
+                                <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="{x:Null}">
+                                <Setter TargetName="Box" Property="Background" Value="#1F5FA8"/>
+                                <Setter TargetName="Box" Property="BorderBrush" Value="#1F5FA8"/>
+                                <Setter TargetName="Dash" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- RadioButton: ponto azul -->
+        <Style TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,2,14,2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <StackPanel Orientation="Horizontal" Background="Transparent">
+                            <Grid Width="15" Height="15" VerticalAlignment="Center">
+                                <Ellipse x:Name="Ring" Fill="White" Stroke="#8C96A3" StrokeThickness="1"/>
+                                <Ellipse x:Name="Dot" Width="7" Height="7" Fill="#1F5FA8" Visibility="Collapsed"/>
+                            </Grid>
+                            <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="Stroke" Value="#1F5FA8"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ring" Property="Stroke" Value="#1F5FA8"/>
+                                <Setter TargetName="Dot" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ================= AGRUPADORES ================= -->
+        <!-- GroupBox padrão: branco, borda clara -->
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="BorderBrush" Value="#C9D2DE"/>
+            <Setter Property="Background" Value="White"/>
+        </Style>
+        <!-- GroupBox com faixa azul (funções lado a lado no topo da janela) -->
+        <Style x:Key="Faixa" TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupBox">
+                        <Border BorderBrush="#1F5FA8" BorderThickness="1.5" CornerRadius="4" Background="White">
+                            <DockPanel>
+                                <Border DockPanel.Dock="Top" Background="#1F5FA8" CornerRadius="2,2,0,0" Padding="10,6">
+                                    <ContentPresenter ContentSource="Header" TextElement.Foreground="White"
+                                                      TextElement.FontWeight="SemiBold" TextElement.FontSize="13"/>
+                                </Border>
+                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                            </DockPanel>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Banner do topo: azul escuro #184C87 -->
+        <Style x:Key="Banner" TargetType="Border">
+            <Setter Property="Background" Value="#184C87"/>
+            <Setter Property="Padding" Value="14,10"/>
+        </Style>
+        <!-- Avisos dentro das abas -->
+        <Style x:Key="AvisoAmarelo" TargetType="Border">
+            <Setter Property="Background" Value="#FFF3CD"/>
+            <Setter Property="BorderBrush" Value="#E0A800"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="3"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+        <Style x:Key="AvisoPerigo" TargetType="Border" BasedOn="{StaticResource AvisoAmarelo}">
+            <Setter Property="Background" Value="#F8D7DA"/>
+            <Setter Property="BorderBrush" Value="#A93232"/>
+        </Style>
+
+        <!-- ================= TEXTOS ================= -->
+        <Style x:Key="Secao" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+        <Style x:Key="Rotulo" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#3B4453"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+        <Style x:Key="Dica" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#5A6778"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,2,0,4"/>
+        </Style>
+
+        <!-- ================= LISTAS ================= -->
+        <!-- ListView + GridView (padrão): colunas com largura ajustável, Ctrl/Shift nativos.
+             Camadas da linha: 1) alternância branco/#F7F9FB  2) RowBrush do item (alterado/apagado)
+             3) seleção amarela 70% com contorno #F9A825 por cima (a cor de baixo continua visível). -->
+        <Style TargetType="ListViewItem">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="ToolTip" Value="{Binding Dica}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListViewItem">
+                        <Border Background="{TemplateBinding Background}">
+                            <Border Background="{Binding RowBrush}">
+                                <Border x:Name="Sel" Background="Transparent" BorderBrush="Transparent"
+                                        BorderThickness="0,1,0,1" Padding="0,1">
+                                    <GridViewRowPresenter Content="{TemplateBinding Content}"
+                                                          Columns="{TemplateBinding GridView.ColumnCollection}"
+                                                          VerticalAlignment="Center"/>
+                                </Border>
+                            </Border>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Sel" Property="Background" Value="#B3FFF59D"/>
+                                <Setter TargetName="Sel" Property="BorderBrush" Value="#F9A825"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="ItemsControl.AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="#F7F9FB"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="ListView">
+            <Setter Property="SelectionMode" Value="Extended"/>
+            <Setter Property="AlternationCount" Value="2"/>
+            <Setter Property="BorderBrush" Value="#C9D2DE"/>
+            <Setter Property="Background" Value="White"/>
+        </Style>
+        <Style TargetType="GridViewColumnHeader">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        </Style>
+
+        <!-- ListBox (listas simples de valores): mesma seleção amarela -->
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,1,0,1" Padding="4,2">
+                            <ContentPresenter TextElement.Foreground="#1E2A38"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#E9ECF0"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#B3FFF59D"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#F9A825"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Exceção: lista de VALORES do filtro por parâmetro usa a seleção azul padrão do Windows
+             (estilo com chave substitui o amarelo e volta ao modelo do sistema) -->
+        <Style x:Key="ItemValorPadrao" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="2,1"/>
+        </Style>
+
+        <!-- DataGrid (quando precisar dele): seleção amarela pintada na célula, por cima da alternância -->
+        <Style TargetType="DataGrid">
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="CanUserDeleteRows" Value="False"/>
+            <Setter Property="CanUserResizeColumns" Value="True"/>
+            <Setter Property="SelectionMode" Value="Extended"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+            <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#E2E6EC"/>
+            <Setter Property="RowBackground" Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="#F7F9FB"/>
+            <Setter Property="BorderBrush" Value="#C9D2DE"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="RowHeight" Value="24"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#E6EAEF"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="BorderBrush" Value="#C9D2DE"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Foreground" Value="#1E2A38"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border x:Name="Sel" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,1,0,1" Padding="4,0">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Sel" Property="Background" Value="#B3FFF59D"/>
+                                <Setter TargetName="Sel" Property="BorderBrush" Value="#F9A825"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <!-- sem isso o Windows pinta o texto da linha selecionada de branco -->
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Foreground" Value="#1E2A38"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- DataGrid com caixa ✓ (marcado = destacado): CellStyle="{StaticResource CelulaMarcavel}" e
+             SelectionMode="Single". O amarelo é pintado nas células pela propriedade Destaque do item,
+             porque nas linhas alternadas a grade impõe a cor cinza por cima do fundo da linha. -->
+        <Style x:Key="CelulaMarcavel" TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Foreground" Value="#1E2A38"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border x:Name="Fundo" Background="Transparent" BorderBrush="Transparent" BorderThickness="0,1,0,1" Padding="4,0">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Destaque}" Value="True">
+                                <Setter TargetName="Fundo" Property="Background" Value="#B3FFF59D"/>
+                                <Setter TargetName="Fundo" Property="BorderBrush" Value="#F9A825"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Alça discreta para ajustar largura de colunas em grades montadas no código -->
+        <Style x:Key="ColResize" TargetType="Thumb">
+            <Setter Property="Width" Value="7"/>
+            <Setter Property="Cursor" Value="SizeWE"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="Transparent">
+                            <Rectangle Width="1" HorizontalAlignment="Right" Margin="0,10" Fill="#C9CFD8"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="ProgressBar">
+            <Setter Property="Foreground" Value="#1F5FA8"/>
+            <Setter Property="Height" Value="14"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===================== BANNER ===================== -->
+        <Border Grid.Row="0" Style="{StaticResource Banner}">
+            <StackPanel>
+                <TextBlock Text="Locação de conduíte" Foreground="White" FontSize="20" FontWeight="SemiBold"/>
+                <TextBlock x:Name="TxtContexto" Text="Projeto ativo: —" Foreground="White" Opacity="0.9" Margin="0,2,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ===================== CORPO ===================== -->
+        <Grid Grid.Row="1" x:Name="GrdCorpo" Margin="10,8,10,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition x:Name="RowLista" Height="0"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Altura da laje -->
+            <Border Grid.Row="0" Background="White" BorderBrush="#A93232" BorderThickness="2" CornerRadius="4"
+                    Padding="10,8" Margin="0,0,0,8">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Altura da laje (m)" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox x:Name="TxtAltura" Text="3,00" Width="70" VerticalAlignment="Center"
+                             ToolTip="Eletrodutos acima desta altura são classificados como embutidos na laje."/>
+                    <TextBlock x:Name="TxtAlturaDica" Style="{StaticResource Dica}" Margin="10,0,0,0" VerticalAlignment="Center"
+                               Text="Enter atualiza a coluna Valor novo e o quantitativo."/>
+                </StackPanel>
+            </Border>
+
+            <!-- Lista de eletrodutos -->
+            <!-- Barra que abre e fecha a lista; o resumo fica à vista com a lista fechada -->
+            <Border Grid.Row="1" x:Name="BrdEletrodutos" Background="#1F5FA8" BorderBrush="#1F5FA8" BorderThickness="1.5"
+                    CornerRadius="4" Padding="10,6" Margin="0,0,0,8" Cursor="Hand"
+                    ToolTip="Clique para abrir ou fechar a lista de eletrodutos">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="TxtEletrodutos" Text="▸ Eletrodutos" FontSize="13" FontWeight="SemiBold" Foreground="White"/>
+                    <TextBlock Grid.Column="1" x:Name="TxtResumoEletrodutos" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Right"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="12,0,0,0"/>
+                </Grid>
+            </Border>
+
+            <GroupBox Grid.Row="2" x:Name="PnlEletrodutos" Margin="0,0,0,8" Visibility="Collapsed">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Pesquisar:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Grid.Column="1" x:Name="TxtPesquisa" Margin="0,0,10,0" ToolTip="Filtra pelo texto de qualquer coluna"/>
+                        <TextBlock Grid.Column="2" Text="Situação:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Grid.Column="3" x:Name="CmbSituacao" SelectedIndex="0" Margin="0,0,10,0">
+                            <ComboBoxItem Content="Todas"/>
+                            <ComboBoxItem Content="Vai mudar"/>
+                            <ComboBoxItem Content="Sem mudança"/>
+                            <ComboBoxItem Content="Não pode ser alterado"/>
+                        </ComboBox>
+                        <CheckBox Grid.Column="4" x:Name="ChkSomenteMarcados" Content="Somente marcados" VerticalAlignment="Center"/>
+                    </Grid>
+
+                    <Grid Grid.Row="1" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <!-- Legenda de cores: mesmas cores das linhas -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="24" Height="16" Background="#FFC98B" BorderBrush="#5A6778" BorderThickness="1" Margin="0,0,5,0"/>
+                            <TextBlock Text="Gravado nesta sessão" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                            <Border Width="24" Height="16" Background="#12000000" BorderBrush="#5A6778" BorderThickness="1" Margin="0,0,5,0"/>
+                            <TextBlock Text="Não pode ser alterado" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button x:Name="BtnMarcarVisiveis" Content="Marcar visíveis"/>
+                            <Button x:Name="BtnDesmarcarVisiveis" Content="Desmarcar visíveis"/>
+                            <Button x:Name="BtnInverter" Content="Inverter"/>
+                            <Button x:Name="BtnColunas" Content="Colunas ▾" Margin="0"
+                                    ToolTip="Escolha quais colunas aparecem na lista"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Colunas criadas no script (montar_colunas) -->
+                    <ListView Grid.Row="2" x:Name="LvItens"/>
+
+                    <TextBlock Grid.Row="3" x:Name="TxtContagem" FontWeight="SemiBold" Margin="0,5,0,0" Text="0 selecionado(s)"/>
+                </Grid>
+            </GroupBox>
+
+            <!-- Quantitativo: acompanha as linhas marcadas -->
+            <GroupBox Grid.Row="3" Style="{StaticResource Faixa}" Header="Quantitativo das linhas marcadas (m)">
+                <StackPanel>
+                    <TextBlock x:Name="TxtQuantVazio" Style="{StaticResource Dica}" Margin="0" Visibility="Collapsed"
+                               Text="Marque linhas na lista para ver o quantitativo."/>
+                    <!-- Colunas criadas no script (montar_quantitativo) -->
+                    <ListView x:Name="LvQuantitativo" MaxHeight="170"/>
+                </StackPanel>
+            </GroupBox>
+        </Grid>
+
+        <!-- ===================== STATUS E PROGRESSO (só durante a execução) ===================== -->
+        <Grid Grid.Row="2" x:Name="PnlProgresso" Margin="10,8,10,0" Visibility="Collapsed">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="10"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <ProgressBar x:Name="PbProgresso" Minimum="0" Maximum="1" Value="0"/>
+            <TextBlock Grid.Column="2" x:Name="TxtStatus" Text="Pronto." Style="{StaticResource Dica}" VerticalAlignment="Center" Margin="0"/>
+        </Grid>
+
+        <!-- ===================== RODAPÉ ===================== -->
+        <Border Grid.Row="3" Background="White" BorderBrush="#C9D2DE" BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="10,8,10,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <!-- Total do quantitativo das linhas marcadas -->
+                <TextBlock x:Name="TxtTotais" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"
+                           TextTrimming="CharacterEllipsis"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="BtnCancelar" Content="Cancelar" Visibility="Collapsed"
+                        ToolTip="Para depois do item em andamento e mantém o que já foi feito."/>
+                <Button x:Name="BtnCancelarDescartar" Content="Cancelar e descartar" Visibility="Collapsed"
+                        ToolTip="Para depois do item em andamento e desfaz tudo o que foi feito nesta execução."/>
+                <Button x:Name="BtnGravar" Content="Gravar no Revit" Style="{StaticResource Principal}" MinWidth="140"/>
+                <Button x:Name="BtnFechar" Content="Fechar" Margin="0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ===================== RESULTADO FINAL (painel por cima da janela) ===================== -->
+        <Grid x:Name="PnlResultado" Grid.RowSpan="4" Visibility="Collapsed" Background="#66000000">
+            <Border Background="White" BorderBrush="#C9D2DE" BorderThickness="1" CornerRadius="6"
+                    MinWidth="460" MaxWidth="900" MaxHeight="600" Margin="40"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <!-- faixa: verde = sucesso, vermelho = com problemas, azul = cancelado -->
+                    <Border x:Name="BrdResultadoTopo" Background="#1E7B4A" CornerRadius="5,5,0,0" Padding="16,10">
+                        <TextBlock x:Name="TxtResultadoTitulo" Text="Processo concluído com sucesso"
+                                   Foreground="White" FontSize="16" FontWeight="SemiBold"/>
+                    </Border>
+                    <TextBlock Grid.Row="1" x:Name="TxtResultadoMensagem" Margin="16,12,16,8" FontSize="13" TextWrapping="Wrap"/>
+                    <DockPanel Grid.Row="2" x:Name="PnlResultadoProblemas" Margin="16,0,16,0" Visibility="Collapsed">
+                        <TextBlock DockPanel.Dock="Top" x:Name="TxtResultadoProblemas" Style="{StaticResource Secao}"
+                                   Foreground="#A93232" Text="Não foi possível (0):"/>
+                        <ListView x:Name="LvProblemas" MinHeight="120">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Id" Width="80" DisplayMemberBinding="{Binding Id}"/>
+                                    <GridViewColumn Header="Elemento" Width="260" DisplayMemberBinding="{Binding Elemento}"/>
+                                    <GridViewColumn Header="Problema" Width="360" DisplayMemberBinding="{Binding Problema}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="16,12,16,14">
+                        <Button x:Name="BtnResultadoSelecionar" Content="Selecionar no Revit" Visibility="Collapsed"
+                                ToolTip="Seleciona no Revit os elementos marcados na tabela (ou todos, se nenhum estiver marcado)"/>
+                        <Button x:Name="BtnResultadoTxt" Content="Salvar tabela em TXT…" Visibility="Collapsed"
+                                ToolTip="Escolha onde salvar a tabela de problemas"/>
+                        <Button x:Name="BtnResultadoOk" Content="OK" Style="{StaticResource Principal}" MinWidth="90" Margin="0"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

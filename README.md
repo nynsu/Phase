@@ -8,12 +8,14 @@ Extensão para o **Autodesk Revit** desenvolvida para o ecossistema **pyRevit**,
 
 ## 🚀 Funcionalidades
 
-- **ConduitLocator:**
+- **Locação de Eletroduto (`LocEletroduto`):**
   - Classifica automaticamente os eletrodutos (`Sobreposto`, `Enterrado`, `Embutido na Laje` ou `Parede`).
-  - Análise baseada na elevação e na altura de laje informada pelo usuário.
-- **PumpSpec:**
-  - Gera e padroniza automaticamente o parâmetro *"Descrição do Material"* das bombas selecionadas.
-  - Interface visual dedicada para especificação e nomeação do Quadro de Comando de Bombas (QCB).
+  - Interface visual dedicada com ajuste da altura de laje, prévia em tempo real, quantitativo em metros e filtros por diâmetro e situação.
+  - Gravação transacional segura no Revit com suporte completo a Undo (`Ctrl+Z`).
+- **Especificação de Bomba (`EspecBomba`):**
+  - Lista as bombas do projeto e permite editar especificações técnicas diretamente pela interface.
+  - Gera e padroniza automaticamente o parâmetro *"Descrição do Material"* para a bomba e para o Quadro de Comando de Bombas (QCB).
+  - Gravação individual ou combinada com validação prévia de dados.
 
 ## 📦 Como Instalar no Autodesk Revit
 

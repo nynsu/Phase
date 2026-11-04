@@ -1,0 +1,7 @@
+title: |
+  Espec.
+  Bomba
+tooltip: Gera e padroniza a especificação técnica da bomba e do quadro de comando (QCB).
+author: Nynsu
+context: doc-project
+min_revit_version: 2026

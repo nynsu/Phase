@@ -1,0 +1,7 @@
+title: |
+  Locação de
+  Eletroduto
+tooltip: Classifica automaticamente os eletrodutos (Sobreposto, Enterrado, Embutido na Laje ou Parede) com base na altura da laje definida pelo usuário.
+author: Nynsu
+context: doc-project
+min_revit_version: 2026
