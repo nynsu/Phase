@@ -43,6 +43,7 @@ import System
 from System.Collections.Generic import List
 from System.Windows import FontStyles, Visibility
 from System.Windows.Controls import Control
+from System.Windows.Input import Key, Keyboard, ModifierKeys
 from System.Windows.Media import Brushes, Color, SolidColorBrush
 
 from pyrevit import revit, DB, forms, script
@@ -59,6 +60,7 @@ NOME_FERRAMENTA = u'Descrição da bomba'
 XAML_FILE = script.get_bundle_file('ui.xaml')
 
 PARAM_DESCRICAO = u'Descrição do Material'
+PARAM_MARCA = u'Marca'
 GRUPO_COMPARTILHADO = u'pyRevit_Bombas'
 SEM_VALOR = u'—'             # parâmetro sem valor legível: bloqueia a gravação
 
@@ -77,7 +79,7 @@ DADOS = [
     ('MCA', PARAMETROS_BOMBA[4], u'MCA', None),
 ]
 ROTULO_FASE = u'Fase'
-INDICE_FASE = {u'1': 0, u'2': 1, u'3': 2}    # Fase numérica <-> lista da janela
+INDICE_FASE = {u'1': 0, u'3': 1}    # Fase numérica <-> lista da janela
 
 
 def brush(hexa):
@@ -333,6 +335,21 @@ def localizar_descricao(el, preferir_tipo):
     return None, False
 
 
+def localizar_marca(el, preferir_tipo):
+    """Localiza o parâmetro Marca no tipo ou na instância."""
+    tipo = doc.GetElement(el.GetTypeId())
+    ordem = ((tipo, True), (el, False)) if preferir_tipo else ((el, False), (tipo, True))
+    for holder, no_tipo in ordem:
+        if holder is not None:
+            p = holder.get_Parameter(DB.BuiltInParameter.ALL_MODEL_MARK)
+            if p is not None:
+                return p, no_tipo
+            p = holder.LookupParameter(PARAM_MARCA)
+            if p is not None:
+                return p, no_tipo
+    return None, False
+
+
 def criar_parametro_descricao(el):
     """Vincula o parâmetro de tipo à categoria do elemento. Chamar com transação aberta."""
     cat = el.Category
@@ -398,6 +415,27 @@ class SilenciarAvisos(DB.IFailuresPreprocessor):
         return DB.FailureProcessingResult.Continue
 
 
+def erro_amigavel(ex):
+    """Troca mensagens técnicas da API do Revit por texto claro."""
+    bruto = to_text(ex)
+    baixo = bruto.lower()
+    regras = (
+        (u'outside of transaction', u'Falha interna ao gravar (fora de transação). Tente novamente.'),
+        (u'read-only', u'O parâmetro é somente leitura e não pode ser alterado.'),
+        (u'somente leitura', u'O parâmetro é somente leitura e não pode ser alterado.'),
+        (u'not valid', u'O elemento não existe mais ou não é válido. Selecione-o de novo.'),
+        (u'has been deleted', u'O elemento foi excluído do projeto.'),
+        (u'cannot be modified', u'O Revit não permite alterar este elemento (pode estar em um grupo ou bloqueado).'),
+        (u'worksharing', u'O elemento está sendo editado por outra pessoa (compartilhamento de trabalho).'),
+        (u'owned by', u'O elemento está sendo editado por outra pessoa (compartilhamento de trabalho).'),
+        (u'storage type', u'O valor não combina com o tipo do parâmetro (texto ou número).'),
+    )
+    for chave, texto in regras:
+        if chave in baixo:
+            return texto
+    return bruto
+
+
 def transacao(nome):
     t = DB.Transaction(doc, nome)
     avisos = SilenciarAvisos()
@@ -407,7 +445,21 @@ def transacao(nome):
     return t, avisos
 
 
-def gravar_descricao(el, texto, preferir_tipo, nome):
+def gravar_marca(el, texto, preferir_tipo, nome):
+    """Grava o parâmetro Marca no elemento/tipo."""
+    if not texto:
+        return []
+    p, _ = localizar_marca(el, preferir_tipo)
+    if p is None:
+        raise Exception(u'O parâmetro "Marca" não foi encontrado em {}.'.format(nome))
+    if p.IsReadOnly:
+        raise Exception(u'O parâmetro "Marca" em {} é somente leitura.'.format(nome))
+    if not p.Set(texto):
+        raise Exception(u'O Revit não aceitou o texto da Marca em {}.'.format(nome))
+    return []
+
+
+def gravar_descricao(el, texto, preferir_tipo, nome, marca=None):
     """Grava num elemento, em transação própria: a falha de um não desfaz o outro.
     Devolve a lista de avisos do Revit; levanta exceção se não gravou."""
     t, avisos = transacao(u'{} - {}'.format(NOME_FERRAMENTA, nome))
@@ -424,6 +476,8 @@ def gravar_descricao(el, texto, preferir_tipo, nome):
             raise Exception(u'O parâmetro "{}" é somente leitura.'.format(PARAM_DESCRICAO))
         if not p.Set(texto):
             raise Exception(u'O Revit não aceitou o texto.')
+        if marca:        # Marca na mesma transação (precisa estar com a transação aberta)
+            gravar_marca(el, marca, preferir_tipo, nome)
         if t.Commit() != DB.TransactionStatus.Committed:
             raise Exception(u'O Revit não confirmou a gravação.')
     except Exception:
@@ -471,16 +525,13 @@ class Janela(forms.WPFWindow):
                        'Vazao': self.TxtVazao, 'MCA': self.TxtMCA}
 
         self.TxtContexto.Text = u'Projeto ativo: {}'.format(doc.Title)
-        self.TxtBombasTotal.Text = u'{} bomba(s) no projeto'.format(len(self.bombas))
+        self.TxtBombasTotal.Text = (u'1 bomba no projeto' if len(self.bombas) == 1
+                                     else u'{} bombas no projeto'.format(len(self.bombas)))
         self.CmbBomba.ItemsSource = self.rotulos
         self.CmbBomba.SelectedIndex = inicial
         self.carregar_quadros()
         self.definir_bomba(inicial)
 
-        # as caixas da função e do "Fazer:" são a mesma escolha
-        for a, b in ((self.ChkDados, self.ChkFazerDados), (self.ChkBomba, self.ChkFazerBomba),
-                     (self.ChkQuadro, self.ChkFazerQuadro)):
-            self.ligar_caixas(a, b)
         self.CmbBomba.SelectionChanged += self.bomba_mudou
         self.CmbFase.SelectionChanged += self.dado_mudou
         self.TxtFase.TextChanged += self.dado_mudou
@@ -490,19 +541,14 @@ class Janela(forms.WPFWindow):
         self.BtnGravarDados.Click += lambda s, e: self.executar(['dados'])
         self.BtnGravarBomba.Click += lambda s, e: self.executar(['bomba'])
         self.BtnGravarQuadro.Click += lambda s, e: self.executar(['quadro'])
-        self.BtnFazerSelecionados.Click += self.fazer_selecionados
-        self.BtnFechar.Click += lambda s, e: self.Close()
+        self.BtnGravarTodos.Click += self.fazer_selecionados
+        self.BtnCancelar.Click += lambda s, e: self.Close()
+        self.CmbQuadroMarca.SelectionChanged += self.quadro_marca_mudou
         self.BtnResultadoOk.Click += lambda s, e: self.fechar_resultado()
         self.BtnResultadoSelecionar.Click += self.selecionar_problemas
         self.BtnResultadoTxt.Click += self.salvar_problemas_txt
         self.Closing += self.ao_fechar
-
-    def ligar_caixas(self, a, b):
-        a.Click += lambda s, e: self.espelhar(a, b)
-        b.Click += lambda s, e: self.espelhar(b, a)
-
-    def espelhar(self, origem, destino):
-        destino.IsChecked = origem.IsChecked
+        self.PreviewKeyDown += self.tecla_atalho
 
     # ---------------------------------------------------------------- bomba e dados
     def definir_bomba(self, indice):
@@ -575,7 +621,7 @@ class Janela(forms.WPFWindow):
         if chave == 'Fase':
             if self.fase_lista:
                 i = self.CmbFase.SelectedIndex
-                return to_text(i + 1) if i >= 0 else u''
+                return (u'1', u'3')[i] if i in (0, 1) else u''   # lista: Monofásica, Trifásico
             return to_text(self.TxtFase.Text).strip()
         return to_text(self.campos[chave].Text).strip()
 
@@ -648,7 +694,7 @@ class Janela(forms.WPFWindow):
         raw = self.valor_campo('Fase')
         if raw == SEM_VALOR:
             raw = u''
-        fase = u'Bifásico' if self.fase_lista and raw == u'2' else self.nome_fase(raw)
+        fase = self.nome_fase(raw)
         tensao = self.valor_campo('Tensao') or SEM_VALOR
         potencia = self.valor_campo('Potencia') or SEM_VALOR
         vazao = self.valor_campo('Vazao') or SEM_VALOR
@@ -670,11 +716,11 @@ class Janela(forms.WPFWindow):
         self.CmbQuadros.ItemsSource = [q[0] for q in lista]
         if not lista:
             motivo = u'Nenhum quadro compatível no projeto.'
-            self.ChkQuadro.IsChecked = False
-            self.ChkFazerQuadro.IsChecked = False
-            for ctrl in (self.ChkQuadro, self.ChkFazerQuadro, self.CmbQuadros,
-                         self.TxtQuadroNovo, self.BtnGravarQuadro):
+            for ctrl in (self.CmbQuadros, self.TxtQuadroNovo, self.BtnGravarQuadro,
+                         self.CmbQuadroMarca):
                 ctrl.IsEnabled = False
+            self.TxtQuadroDestino.Visibility = Visibility.Visible   # aviso importante
+            self.BtnGravarTodos.Content = u'Gravar Todos (Dados + Bomba)'
             self.TxtQuadroAtual.Text = SEM_VALOR
             self.TxtQuadroDestino.Text = motivo
             return
@@ -708,28 +754,77 @@ class Janela(forms.WPFWindow):
         else:
             txt_destino.Text = u'Grava na instância: vale só para este elemento.'
 
+    def quadro_marca_mudou(self, sender, e):
+        sel = self.CmbQuadroMarca.SelectedItem
+        txt_sel = to_text(sel.Content if hasattr(sel, 'Content') else sel)
+        if txt_sel == u'Outro':
+            self.TxtQuadroMarcaOutro.Visibility = Visibility.Visible
+        else:
+            self.TxtQuadroMarcaOutro.Visibility = Visibility.Collapsed
+
+    def valor_marca_quadro(self):
+        sel = self.CmbQuadroMarca.SelectedItem
+        if sel is None:
+            return u''
+        txt_sel = to_text(sel.Content if hasattr(sel, 'Content') else sel).strip()
+        if txt_sel == u'Outro':
+            return to_text(self.TxtQuadroMarcaOutro.Text).strip()
+        return txt_sel
+
     def atualizar_bomba(self):
         self.mostrar_destino(self.element, True, self.TxtBombaAtual, self.TxtBombaDestino, u'bomba(s)')
+        p_marca, _ = localizar_marca(self.element, True)
+        if p_marca is not None:
+            val = to_text(p_marca.AsString()).strip()
+            self.TxtBombaMarca.Text = val
 
     def atualizar_quadro(self):
         quadro = self.quadro_atual()
         if quadro is not None:
             self.mostrar_destino(quadro, False, self.TxtQuadroAtual, self.TxtQuadroDestino, u'quadro(s)')
+            p_marca, _ = localizar_marca(quadro, False)
+            val = to_text(p_marca.AsString()).strip() if p_marca else u''
+            if val in [u'REF.: EBARA STS', u'REF.: EBARA APS']:
+                for item in self.CmbQuadroMarca.Items:
+                    c = to_text(item.Content if hasattr(item, 'Content') else item)
+                    if c == val:
+                        self.CmbQuadroMarca.SelectedItem = item
+                        break
+                self.TxtQuadroMarcaOutro.Visibility = Visibility.Collapsed
+                self.TxtQuadroMarcaOutro.Text = u''
+            elif val:
+                for item in self.CmbQuadroMarca.Items:
+                    c = to_text(item.Content if hasattr(item, 'Content') else item)
+                    if c == u'Outro':
+                        self.CmbQuadroMarca.SelectedItem = item
+                        break
+                self.TxtQuadroMarcaOutro.Visibility = Visibility.Visible
+                self.TxtQuadroMarcaOutro.Text = val
+            else:
+                self.CmbQuadroMarca.SelectedIndex = 0   # padrao: primeira opcao
+                self.TxtQuadroMarcaOutro.Visibility = Visibility.Collapsed
+                self.TxtQuadroMarcaOutro.Text = u''
 
     # ==========================================================================
     # 6. JANELA: GRAVAÇÃO E PAINEL DE RESULTADO
     # ==========================================================================
+    def tecla_atalho(self, sender, e):
+        """Esc: fecha o resultado ou cancela. Ctrl+Enter: Gravar Todos."""
+        if e.Key == Key.Escape:
+            e.Handled = True
+            if self.PnlResultado.Visibility == Visibility.Visible:
+                self.fechar_resultado()
+            else:
+                self.Close()
+        elif (e.Key == Key.Enter and (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+              and self.PnlResultado.Visibility != Visibility.Visible):
+            e.Handled = True
+            self.fazer_selecionados(sender, e)
+
     def fazer_selecionados(self, sender, e):
-        funcoes = []
-        if self.ChkFazerDados.IsChecked == True:  # noqa: E712 (Nullable<bool>)
-            funcoes.append('dados')
-        if self.ChkFazerBomba.IsChecked == True:  # noqa: E712
-            funcoes.append('bomba')
-        if self.ChkFazerQuadro.IsChecked == True:  # noqa: E712
+        funcoes = ['dados', 'bomba']
+        if self.quadros:   # sem quadro compativel no projeto, grava so dados e bomba
             funcoes.append('quadro')
-        if not funcoes:
-            forms.alert(u'Marque Dados, Bomba ou Quadro (QCB) em "Fazer:".', title=u'Aviso')
-            return
         self.executar(funcoes)
 
     def dados_funcao(self, funcao):
@@ -810,7 +905,7 @@ class Janela(forms.WPFWindow):
                         problemas += [(self.element, u'Aviso do Revit: ' + a) for a in avisos]
                     except Exception as ex:
                         linhas.append(u'Dados: NÃO foram gravados. Veja o motivo na tabela.')
-                        problemas.append((self.element, to_text(ex)))
+                        problemas.append((self.element, erro_amigavel(ex)))
                         # As descrições dependem dos dados: sem eles, nada mais é gravado
                         for resto in funcoes[funcoes.index('dados') + 1:]:
                             nome = u'Bomba' if resto == 'bomba' else u'Quadro'
@@ -820,14 +915,18 @@ class Janela(forms.WPFWindow):
                 el, texto, preferir_tipo, nome = self.dados_funcao(funcao)
                 rotulo = nome if funcao == 'bomba' else u'Quadro {}'.format(to_text(self.CmbQuadros.SelectedItem))
                 try:
-                    avisos = gravar_descricao(el, texto, preferir_tipo, nome)
+                    texto_marca = to_text(self.TxtBombaMarca.Text).strip() if funcao == 'bomba' else self.valor_marca_quadro()
+                    avisos = gravar_descricao(el, texto, preferir_tipo, nome, texto_marca)
                     gravou = True
-                    linhas.append(u'{}: descrição gravada.'.format(rotulo))
+                    msg_grav = u'{}: descrição gravada.'.format(rotulo)
+                    if texto_marca:
+                        msg_grav = u'{}: descrição e marca gravadas.'.format(rotulo)
+                    linhas.append(msg_grav)
                     for aviso in avisos:
                         problemas.append((el, u'Aviso do Revit: ' + aviso))
                 except Exception as ex:
                     linhas.append(u'{}: NÃO foi gravado. Veja o motivo na tabela.'.format(rotulo))
-                    problemas.append((el, to_text(ex)))
+                    problemas.append((el, erro_amigavel(ex)))
             if gravou:
                 tg.Assimilate()       # vira um único passo no Ctrl+Z do Revit
             else:
