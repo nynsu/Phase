@@ -10,6 +10,13 @@ __pycache__/
 # Pasta privada / em desenvolvimento ignorada
 **/WireMaster.pushbutton/
 WireMaster.pushbutton/
+**/Beta.panel/
+Beta.panel/
+
+# Pacotes e binários de distribuição
+dist/
+*.zip
+*.exe
 
 # Arquivos de sistema e editores
 .DS_Store
@@ -18,5 +25,3 @@ Thumbs.db
 *.user
 .idea/
 .vscode/
-
-*.zip

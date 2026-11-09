@@ -2,7 +2,7 @@
     "name": "Phase",
     "description": "Extensão de ferramentas elétricas para Autodesk Revit via pyRevit",
     "author": "Nynsu",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "type": "extension",
     "url": "https://github.com/nynsu/Phase"
 }
