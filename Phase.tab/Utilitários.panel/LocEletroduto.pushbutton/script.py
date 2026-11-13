@@ -198,7 +198,13 @@ def sanitize_filename(nome, padrao=u'Sem_nome'):
 
 def numero(valor, casas=2):
     """Número com vírgula decimal, como o projetista lê: 3,12."""
-    return u'{0:.{1}f}'.format(valor, casas).replace(u'.', u',')
+    if valor is None:
+        return u'0,00' if casas == 2 else u'0'
+    try:
+        val_float = float(valor)
+    except (ValueError, TypeError):
+        return u'0,00' if casas == 2 else u'0'
+    return u'{0:.{1}f}'.format(val_float, int(casas)).replace(u'.', u',')
 
 
 def ler_altura(texto):

@@ -506,6 +506,32 @@ def gravar_dados(alteracoes):
     return sorted(set(avisos.avisos))
 
 
+def ponto_elemento(el):
+    """Retorna o XYZ de localização do elemento (LocationPoint ou centro da BoundingBox)."""
+    if el is None:
+        return None
+    loc = getattr(el, 'Location', None)
+    if loc is not None and hasattr(loc, 'Point'):
+        return loc.Point
+    try:
+        bbox = el.get_BoundingBox(None)
+        if bbox is not None:
+            return (bbox.Min + bbox.Max) * 0.5
+    except Exception:
+        pass
+    return None
+
+
+def calcular_distancia_metros(el1, el2):
+    """Retorna a distância euclidiana em metros entre dois elementos (1 pé = 0.3048 m)."""
+    p1 = ponto_elemento(el1)
+    p2 = ponto_elemento(el2)
+    if p1 is None or p2 is None:
+        return None
+    dist_pes = p1.DistanceTo(p2)
+    return dist_pes * 0.3048
+
+
 # ==========================================================================
 # 5. JANELA: MONTAGEM E DESTINO DA GRAVAÇÃO
 # ==========================================================================
@@ -529,8 +555,8 @@ class Janela(forms.WPFWindow):
                                      else u'{} bombas no projeto'.format(len(self.bombas)))
         self.CmbBomba.ItemsSource = self.rotulos
         self.CmbBomba.SelectedIndex = inicial
-        self.carregar_quadros()
         self.definir_bomba(inicial)
+        self.carregar_quadros()
 
         self.CmbBomba.SelectionChanged += self.bomba_mudou
         self.CmbFase.SelectionChanged += self.dado_mudou
@@ -557,6 +583,8 @@ class Janela(forms.WPFWindow):
         self.ler_dados()
         self.gerar_textos(forcar=True)
         self.atualizar_bomba()
+        if getattr(self, 'quadros', None):
+            self.atualizar_quadro()
 
     def bomba_mudou(self, sender, e):
         if self.trocando:
@@ -653,6 +681,11 @@ class Janela(forms.WPFWindow):
             self.pintar(self.TxtFase, fase_vazia, self.motivo_bloqueio(self.info['Fase'][0]) is not None)
         self.BrdSemValor.Visibility = Visibility.Visible if algum else Visibility.Collapsed
         self.gerar_textos()
+        quadro = self.quadro_atual()
+        if quadro is not None:
+            marca_atual = self.valor_marca_quadro()
+            if not marca_atual or marca_atual in (u'REF.: EBARA BMS', u'REF.: EBARA STS'):
+                self.selecionar_marca_quadro(self.marca_sugerida_quadro())
 
     def pintar(self, ctrl, vazio, bloqueado):
         if vazio:
@@ -689,6 +722,17 @@ class Janela(forms.WPFWindow):
             return u'Bifásico'
         return fase
 
+    def info_distancia_quadro(self):
+        """Retorna (dist_metros, eh_distante) ou (None, False)."""
+        quadro = self.quadro_atual()
+        el_bomba = getattr(self, 'element', None)
+        if quadro is None or el_bomba is None:
+            return None, False
+        d = calcular_distancia_metros(el_bomba, quadro)
+        if d is None:
+            return None, False
+        return d, (d > 200.0)
+
     def gerar_textos(self, forcar=False):
         """Refaz as descrições; o texto editado à mão só é trocado ao mudar de bomba."""
         raw = self.valor_campo('Fase')
@@ -701,8 +745,14 @@ class Janela(forms.WPFWindow):
         mca = self.valor_campo('MCA') or SEM_VALOR
         bomba = u'Motobomba Centrífuga Submersa, {}, {} V, {} CV, {} m³/h @ {} mca'.format(
             fase, tensao, potencia, vazao, mca)
-        quadro = u'Quadro de Comando de Bomba {} CV {} V {}'.format(
-            potencia, tensao, self.fase_do_quadro(raw, fase))
+
+        fase_q = self.fase_do_quadro(raw, fase)
+        dist_m, eh_distante = self.info_distancia_quadro()
+        sufixo_rele = u' com Relé de Subcarga' if eh_distante else u' com Relé de Nível'
+
+        quadro = u'Quadro de Comando de Bomba {} CV {} V {}{}'.format(
+            potencia, tensao, fase_q, sufixo_rele)
+
         if forcar or self.TxtBombaNovo.Text == self.gerado_bomba:
             self.TxtBombaNovo.Text = bomba
         if forcar or self.TxtQuadroNovo.Text == self.gerado_quadro:
@@ -778,32 +828,59 @@ class Janela(forms.WPFWindow):
             val = to_text(p_marca.AsString()).strip()
             self.TxtBombaMarca.Text = val
 
+    def marca_sugerida_quadro(self):
+        """Retorna 'REF.: EBARA BMS' se monofásica ou 'REF.: EBARA STS' se trifásica."""
+        raw = self.valor_campo('Fase')
+        fase = self.nome_fase(raw)
+        fase_q = self.fase_do_quadro(raw, fase)
+        if u'tri' in fase_q.lower():
+            return u'REF.: EBARA STS'
+        return u'REF.: EBARA BMS'
+
+    def selecionar_marca_quadro(self, valor):
+        opcoes = [u'REF.: EBARA BMS', u'REF.: EBARA STS', u'REF.: EBARA APS']
+        if valor in opcoes:
+            for item in self.CmbQuadroMarca.Items:
+                c = to_text(item.Content if hasattr(item, 'Content') else item)
+                if c == valor:
+                    self.CmbQuadroMarca.SelectedItem = item
+                    break
+            self.TxtQuadroMarcaOutro.Visibility = Visibility.Collapsed
+            self.TxtQuadroMarcaOutro.Text = u''
+        elif valor:
+            for item in self.CmbQuadroMarca.Items:
+                c = to_text(item.Content if hasattr(item, 'Content') else item)
+                if c == u'Outro':
+                    self.CmbQuadroMarca.SelectedItem = item
+                    break
+            self.TxtQuadroMarcaOutro.Visibility = Visibility.Visible
+            self.TxtQuadroMarcaOutro.Text = valor
+        else:
+            sugerida = self.marca_sugerida_quadro()
+            self.selecionar_marca_quadro(sugerida)
+
     def atualizar_quadro(self):
         quadro = self.quadro_atual()
         if quadro is not None:
             self.mostrar_destino(quadro, False, self.TxtQuadroAtual, self.TxtQuadroDestino, u'quadro(s)')
+            
+            # Exibir distância
+            dist_m, eh_distante = self.info_distancia_quadro()
+            if dist_m is not None:
+                classif = u'Distante (> 200m) → Relé de Subcarga' if eh_distante else u'Próxima (≤ 200m) → Relé de Nível'
+                self.TxtDistanciaQuadro.Text = u'Distância da bomba: {:.1f} m ({})'.format(dist_m, classif)
+                self.TxtDistanciaQuadro.Visibility = Visibility.Visible
+            else:
+                self.TxtDistanciaQuadro.Text = u'Distância não calculada (adotado: Próxima)'
+                self.TxtDistanciaQuadro.Visibility = Visibility.Visible
+
             p_marca, _ = localizar_marca(quadro, False)
             val = to_text(p_marca.AsString()).strip() if p_marca else u''
-            if val in [u'REF.: EBARA STS', u'REF.: EBARA APS']:
-                for item in self.CmbQuadroMarca.Items:
-                    c = to_text(item.Content if hasattr(item, 'Content') else item)
-                    if c == val:
-                        self.CmbQuadroMarca.SelectedItem = item
-                        break
-                self.TxtQuadroMarcaOutro.Visibility = Visibility.Collapsed
-                self.TxtQuadroMarcaOutro.Text = u''
-            elif val:
-                for item in self.CmbQuadroMarca.Items:
-                    c = to_text(item.Content if hasattr(item, 'Content') else item)
-                    if c == u'Outro':
-                        self.CmbQuadroMarca.SelectedItem = item
-                        break
-                self.TxtQuadroMarcaOutro.Visibility = Visibility.Visible
-                self.TxtQuadroMarcaOutro.Text = val
+            if not val or val in (u'REF.: EBARA BMS', u'REF.: EBARA STS'):
+                self.selecionar_marca_quadro(self.marca_sugerida_quadro())
             else:
-                self.CmbQuadroMarca.SelectedIndex = 0   # padrao: primeira opcao
-                self.TxtQuadroMarcaOutro.Visibility = Visibility.Collapsed
-                self.TxtQuadroMarcaOutro.Text = u''
+                self.selecionar_marca_quadro(val)
+            self.gerar_textos()
 
     # ==========================================================================
     # 6. JANELA: GRAVAÇÃO E PAINEL DE RESULTADO

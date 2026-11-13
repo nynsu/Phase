@@ -6,7 +6,7 @@
 Unicode True
 
 ; 1. Informacoes Gerais e Versao
-!define VERSION "1.1.1"
+!define VERSION "1.2.0"
 Name "Phase ${VERSION}"
 OutFile "..\dist\Instalador_Phase_v${VERSION}.exe"
 
