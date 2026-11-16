@@ -82,6 +82,48 @@ DADOS = [
 ROTULO_FASE = u'Fase'
 INDICE_FASE = {u'1': 0, u'3': 1}    # Fase numérica <-> lista da janela
 
+NOME_TABELA_ELETRODOS = u'Quantitativo de Cabos - Eletrodos de Nível'
+SECAO_CABO_ELETRODOS = u'2,5 mm²'
+TIPO_CABO_ELETRODOS = u'CABO UNIPOLAR, HEPR, 0,6/1 kV'
+
+PARAM_CABO_NE = u'Cabo Eletrodo NE'
+PARAM_CABO_ND = u'Cabo Eletrodo ND'
+PARAM_CABO_REF = u'Cabo Eletrodo REF'
+PARAM_CABO_TOTAL = u'Cabo Eletrodos Total'
+PARAM_SECAO_CABO = u'Seção Cabo Eletrodos'
+PARAM_TIPO_CABO = u'Tipo Cabo Eletrodos'
+PARAM_PROF_NE = u'Profundidade Eletrodo NE'
+PARAM_PROF_ND = u'Profundidade Eletrodo ND'
+PARAM_PROF_REF = u'Profundidade Eletrodo REF'
+PARAM_DIST_H_POCO = u'Distância Horizontal QCB-Poço'
+PARAM_METODO_LOC = u'Método de Localização'
+PARAM_BOMBA_ASSOC = u'Bomba Associada'
+
+PARAMETROS_PROFUNDIDADE_BOMBA = [
+    u'Profundidade da bomba',
+    u'Profundidade da Bomba',
+    u'Profundidade_Bomba',
+    u'Profundidade Bomba',
+    u'Profundidade',
+    u'Pbomba',
+    u'P_bomba',
+]
+
+PARAMETROS_ELETRODOS_QCB = [
+    (PARAM_CABO_NE, 'length'),
+    (PARAM_CABO_ND, 'length'),
+    (PARAM_CABO_REF, 'length'),
+    (PARAM_CABO_TOTAL, 'length'),
+    (PARAM_SECAO_CABO, 'text'),
+    (PARAM_TIPO_CABO, 'text'),
+    (PARAM_PROF_NE, 'length'),
+    (PARAM_PROF_ND, 'length'),
+    (PARAM_PROF_REF, 'length'),
+    (PARAM_DIST_H_POCO, 'length'),
+    (PARAM_METODO_LOC, 'text'),
+    (PARAM_BOMBA_ASSOC, 'text'),
+]
+
 
 def brush(hexa):
     h = hexa.lstrip('#')
@@ -537,6 +579,563 @@ def calcular_distancia_metros(el1, el2):
 
 
 # ==========================================================================
+# 4B. CABOS DOS ELETRODOS DE NÍVEL (POÇO -> QCB)
+# ==========================================================================
+def metros_para_interno(metros):
+    """Converte metros para unidades internas do Revit (pés)."""
+    return DB.UnitUtils.ConvertToInternalUnits(float(metros), DB.UnitTypeId.Meters)
+
+
+def interno_para_metros(valor_interno):
+    """Converte unidades internas do Revit (pés) para metros."""
+    return DB.UnitUtils.ConvertFromInternalUnits(float(valor_interno), DB.UnitTypeId.Meters)
+
+
+def ponto_conector_eletrico(el):
+    """Retorna o XYZ do primeiro conector elétrico válido do elemento, ou None."""
+    if el is None:
+        return None
+    mep = getattr(el, 'MEPModel', None)
+    if mep is None:
+        return None
+    cm = getattr(mep, 'ConnectorManager', None)
+    if cm is None:
+        return None
+    conns = getattr(cm, 'Connectors', None)
+    if conns is None:
+        return None
+    for conn in conns:
+        try:
+            if conn.Domain == DB.Domain.DomainElectrical and conn.Origin is not None:
+                return conn.Origin
+        except Exception:
+            continue
+    return None
+
+
+def ponto_insercao_familia(el):
+    """Retorna o XYZ do ponto de inserção da família (LocationPoint), ou None."""
+    if el is None:
+        return None
+    loc = getattr(el, 'Location', None)
+    if loc is not None and hasattr(loc, 'Point') and loc.Point is not None:
+        return loc.Point
+    return None
+
+
+def localizar_ponto_eletrodo(el):
+    """Retorna (XYZ, 'conector' | 'insercao') ou (None, None)."""
+    pt_conn = ponto_conector_eletrico(el)
+    if pt_conn is not None:
+        return pt_conn, 'conector'
+    pt_ins = ponto_insercao_familia(el)
+    if pt_ins is not None:
+        return pt_ins, 'insercao'
+    return None, None
+
+
+def calcular_distancia_horizontal_qcb_poco(bomba, quadro):
+    """Calcula DH em metros usando apenas X e Y (conectores elétricos; fallback ponto de inserção).
+    Retorna (dh_metros, metodo_texto, por_aproximacao, erro_msg).
+    """
+    if bomba is None:
+        return None, None, False, u'Nenhuma bomba selecionada para localização.'
+    if quadro is None:
+        return None, None, False, u'Nenhum quadro elétrico (QCB) selecionado para localização.'
+
+    p_bomba, orig_bomba = localizar_ponto_eletrodo(bomba)
+    if p_bomba is None:
+        return None, None, False, u'A bomba "{}" não possui conector elétrico nem ponto de inserção válido.'.format(
+            nome_elemento(bomba))
+
+    p_qcb, orig_qcb = localizar_ponto_eletrodo(quadro)
+    if p_qcb is None:
+        return None, None, False, u'O quadro elétrico "{}" não possui conector elétrico nem ponto de inserção válido.'.format(
+            nome_elemento(quadro))
+
+    dx_int = p_bomba.X - p_qcb.X
+    dy_int = p_bomba.Y - p_qcb.Y
+    dh_int = math.sqrt(dx_int * dx_int + dy_int * dy_int)
+    dh_m = interno_para_metros(dh_int)
+
+    por_aproximacao = not (orig_bomba == 'conector' and orig_qcb == 'conector')
+    metodo = u'Pontos de inserção' if por_aproximacao else u'Conectores'
+    return dh_m, metodo, por_aproximacao, None
+
+
+def ler_profundidade_bomba_metros(bomba):
+    """Lê a profundidade da bomba (em metros) se houver parâmetro compatível (> 0), ou None."""
+    if bomba is None:
+        return None
+    tipo = doc.GetElement(bomba.GetTypeId())
+    p, _ = localizar_dado(bomba, tipo, PARAMETROS_PROFUNDIDADE_BOMBA)
+    if p is None or not p.HasValue:
+        return None
+    try:
+        if p.StorageType == DB.StorageType.Double:
+            try:
+                if p.Definition.GetDataType() == DB.SpecTypeId.Length:
+                    val = interno_para_metros(p.AsDouble())
+                else:
+                    val = float(p.AsDouble())
+            except Exception:
+                val = interno_para_metros(p.AsDouble())
+            return val if val > 0 else None
+        if p.StorageType == DB.StorageType.Integer:
+            val = float(p.AsInteger())
+            return val if val > 0 else None
+        if p.StorageType == DB.StorageType.String:
+            val = valor_numero(p.AsString())
+            return val if (val is not None and val > 0) else None
+    except Exception:
+        return None
+    return None
+
+
+def calcular_cabos_eletrodos(pne_texto, pnd_texto, dh_m, pbomba_m=None):
+    """Valida PNE, PND e Pbomba e calcula os comprimentos individuais (folga 5%) e total.
+    Retorna (resultado_dict, erro_msg).
+    """
+    t_pne = to_text(pne_texto).strip()
+    t_pnd = to_text(pnd_texto).strip()
+    if not t_pne:
+        return None, u'Informe a profundidade do Nível Estático (m).'
+    if not t_pnd:
+        return None, u'Informe a profundidade do Nível Dinâmico (m).'
+
+    pne = valor_numero(t_pne)
+    if pne is None:
+        return None, u'Nível Estático inválido: digite um número positivo em metros (ex.: 15,5).'
+    pnd = valor_numero(t_pnd)
+    if pnd is None:
+        return None, u'Nível Dinâmico inválido: digite um número positivo em metros (ex.: 30).'
+
+    if pne <= 0:
+        return None, u'O Nível Estático deve ser maior que zero (medido a partir da boca do poço).'
+    if pnd <= 0:
+        return None, u'O Nível Dinâmico deve ser maior que zero (medido a partir da boca do poço).'
+    if pne >= pnd:
+        return None, u'O Nível Estático deve ser menor que o Nível Dinâmico.'
+
+    p_ref = pnd + 10.0
+    if pbomba_m is not None and p_ref > (pbomba_m + 1e-6):
+        msg = (u'Aviso: o eletrodo de referência ({:.2f} m) ficaria abaixo da bomba ({:.2f} m). '
+               u'Revise os níveis Estático e Dinâmico.').format(p_ref, pbomba_m).replace(u'.', u',')
+        return None, msg
+
+    l_ne = (dh_m + pne) * 1.05
+    l_nd = (dh_m + pnd) * 1.05
+    l_ref = (dh_m + p_ref) * 1.05
+    l_total = l_ne + l_nd + l_ref
+
+    return {
+        'pne': pne,
+        'pnd': pnd,
+        'pref': p_ref,
+        'dh': dh_m,
+        'l_ne': l_ne,
+        'l_nd': l_nd,
+        'l_ref': l_ref,
+        'l_total': l_total,
+        'secao': SECAO_CABO_ELETRODOS,
+        'tipo': TIPO_CABO_ELETRODOS,
+    }, None
+
+
+def identificacao_bomba_para_qcb(bomba):
+    """Identificação legível da bomba/poço para gravação no QCB."""
+    if bomba is None:
+        return u''
+    p_marca, _ = localizar_marca(bomba, True)
+    marca = to_text(p_marca.AsString()).strip() if p_marca is not None else u''
+    nome = nome_elemento(bomba)
+    if marca:
+        return u'{} ({})'.format(marca, nome)
+    return nome
+
+
+def grupo_ui_eletrodos():
+    """Retorna GroupTypeId compatível com Revit 2026 (seção Dados na paleta de Propriedades)."""
+    for nome in ('Data', 'IdentityData', 'General'):
+        g = getattr(DB.GroupTypeId, nome, None)
+        if g is not None:
+            return g
+    return DB.GroupTypeId.IdentityData
+
+
+def _spec_type_eletrodo(tipo):
+    if tipo == 'length':
+        return DB.SpecTypeId.Length
+    return DB.SpecTypeId.String.Text
+
+
+def garantir_parametros_eletrodos():
+    """Cria e vincula (instância) os parâmetros compartilhados dos eletrodos à categoria
+    Equipamentos elétricos caso não existam. Chamar com transação aberta.
+    Retorna a lista dos nomes criados/vinculados.
+    """
+    cat_equip = DB.Category.GetCategory(doc, DB.BuiltInCategory.OST_ElectricalEquipment)
+    if cat_equip is None:
+        raise Exception(u'A categoria Equipamentos elétricos não está disponível no projeto.')
+
+    vinculos = doc.ParameterBindings
+    existentes = {}
+    it = vinculos.ForwardIterator()
+    it.Reset()
+    while it.MoveNext():
+        defn = it.Key
+        binding = it.Current
+        if defn is not None:
+            existentes[defn.Name] = (defn, binding)
+
+    faltantes = []
+    for nome, tipo in PARAMETROS_ELETRODOS_QCB:
+        if nome in existentes:
+            _, binding = existentes[nome]
+            cats = getattr(binding, 'Categories', None)
+            if isinstance(binding, DB.InstanceBinding) and cats is not None and cats.Contains(cat_equip):
+                continue
+        faltantes.append((nome, tipo))
+
+    if not faltantes:
+        return []
+
+    app = doc.Application
+    try:
+        original_spf = app.SharedParametersFilename
+    except Exception:
+        original_spf = u''
+    temp_spf = None
+    criados = []
+    grupo_ui = grupo_ui_eletrodos()
+
+    def _garantir_arquivo_sp_temporario():
+        caminho = os.path.join(tempfile.gettempdir(), 'phase_eletrodos_sp.txt')
+        precisa_gravar = not os.path.exists(caminho)
+        if not precisa_gravar:
+            try:
+                with open(caminho, 'rb') as f:
+                    raw = f.read()
+                precisa_gravar = (b'*META' not in raw and b'*\x00M\x00E\x00T\x00A' not in raw)
+            except Exception:
+                precisa_gravar = True
+        if precisa_gravar:
+            cabecalho = (
+                '# This is a Revit shared parameter file.\n'
+                '# Do not edit manually.\n'
+                '*META\tVERSION\tMINVERSION\n'
+                'META\t2\t1\n'
+                '*GROUP\tID\tNAME\n'
+                '*PARAM\tGUID\tNAME\tDATATYPE\tDATACATEGORY\tGROUP\tVISIBLE\tDESCRIPTION\tUSERMODIFIABLE\tHIDEWHENNOVALUE\n'
+            )
+            with open(caminho, 'w') as f:
+                f.write(cabecalho)
+        return caminho
+
+    def _abrir_def_file():
+        def_f = app.OpenSharedParameterFile()
+        if def_f is None:
+            raise Exception(u'Não foi possível abrir o arquivo de parâmetros compartilhados.')
+        return def_f
+
+    def _obter_ou_criar_definicao(df, nome, tipo):
+        grupo = None
+        for g in df.Groups:
+            if g.Name == GRUPO_COMPARTILHADO:
+                grupo = g
+                break
+        if grupo is None:
+            grupo = df.Groups.Create(GRUPO_COMPARTILHADO)
+        defn = None
+        for d in grupo.Definitions:
+            if d.Name == nome:
+                defn = d
+                break
+        if defn is None:
+            opts = DB.ExternalDefinitionCreationOptions(nome, _spec_type_eletrodo(tipo))
+            defn = grupo.Definitions.Create(opts)
+        return defn
+
+    try:
+        def_file = None
+        if original_spf and os.path.exists(original_spf):
+            try:
+                def_file = _abrir_def_file()
+            except Exception:
+                def_file = None
+
+        if def_file is None:
+            temp_spf = _garantir_arquivo_sp_temporario()
+            app.SharedParametersFilename = temp_spf
+            def_file = _abrir_def_file()
+
+        for nome, tipo in faltantes:
+            if nome in existentes:
+                defn, binding = existentes[nome]
+                categorias = app.Create.NewCategorySet()
+                categorias.Insert(cat_equip)
+                if hasattr(binding, 'Categories'):
+                    for c in binding.Categories:
+                        if not categorias.Contains(c):
+                            categorias.Insert(c)
+                ok = vinculos.ReInsert(defn, app.Create.NewInstanceBinding(categorias), grupo_ui)
+            else:
+                try:
+                    defn = _obter_ou_criar_definicao(def_file, nome, tipo)
+                except Exception:
+                    # Caso o arquivo original do usuário seja somente leitura, usa arquivo temporário
+                    if temp_spf is None:
+                        temp_spf = _garantir_arquivo_sp_temporario()
+                        app.SharedParametersFilename = temp_spf
+                        def_file = _abrir_def_file()
+                    defn = _obter_ou_criar_definicao(def_file, nome, tipo)
+
+                categorias = app.Create.NewCategorySet()
+                categorias.Insert(cat_equip)
+                ok = vinculos.Insert(defn, app.Create.NewInstanceBinding(categorias), grupo_ui)
+
+            if not ok:
+                raise Exception(u'O Revit não aceitou criar/vincular o parâmetro "{}".'.format(nome))
+            criados.append(nome)
+    finally:
+        if temp_spf is not None:
+            try:
+                app.SharedParametersFilename = original_spf or u''
+            except Exception:
+                pass
+
+    return criados
+
+
+def _gravar_parametro_instancia(el, nome, valor, eh_comprimento):
+    p = el.LookupParameter(nome)
+    if p is None:
+        raise Exception(u'O parâmetro "{}" não foi encontrado no quadro elétrico.'.format(nome))
+    if p.IsReadOnly:
+        raise Exception(u'O parâmetro "{}" no quadro elétrico é somente leitura.'.format(nome))
+    if eh_comprimento:
+        ok = p.Set(metros_para_interno(valor))
+    else:
+        ok = p.Set(to_text(valor))
+    if not ok:
+        raise Exception(u'O Revit não aceitou gravar "{}" no parâmetro "{}".'.format(valor, nome))
+
+
+def gravar_eletrodos_qcb(quadro, bomba, resultado, dh_m, metodo_loc):
+    """Cria os parâmetros no QCB se faltarem e grava comprimentos, especificação e conferência."""
+    t, avisos = transacao(u'{} - Cabos Eletrodos'.format(NOME_FERRAMENTA))
+    t.Start()
+    try:
+        criados = garantir_parametros_eletrodos()
+        if criados:
+            doc.Regenerate()
+
+        valores = [
+            (PARAM_CABO_NE, resultado['l_ne'], True),
+            (PARAM_CABO_ND, resultado['l_nd'], True),
+            (PARAM_CABO_REF, resultado['l_ref'], True),
+            (PARAM_CABO_TOTAL, resultado['l_total'], True),
+            (PARAM_SECAO_CABO, resultado['secao'], False),
+            (PARAM_TIPO_CABO, resultado['tipo'], False),
+            (PARAM_PROF_NE, resultado['pne'], True),
+            (PARAM_PROF_ND, resultado['pnd'], True),
+            (PARAM_PROF_REF, resultado['pref'], True),
+            (PARAM_DIST_H_POCO, dh_m, True),
+            (PARAM_METODO_LOC, metodo_loc, False),
+            (PARAM_BOMBA_ASSOC, identificacao_bomba_para_qcb(bomba), False),
+        ]
+        for nome, val, eh_comp in valores:
+            _gravar_parametro_instancia(quadro, nome, val, eh_comp)
+
+        if t.Commit() != DB.TransactionStatus.Committed:
+            raise Exception(u'O Revit não confirmou a gravação dos cabos dos eletrodos.')
+    except Exception:
+        if t.HasStarted() and not t.HasEnded():
+            t.RollBack()
+        raise
+    return criados, sorted(set(avisos.avisos))
+
+
+def _configurar_formato_metros(field):
+    try:
+        fmt = field.GetFormatOptions()
+        fmt.UseDefault = False
+        fmt.SetUnitTypeId(DB.UnitTypeId.Meters)
+        fmt.Accuracy = 0.01
+        try:
+            fmt.SetSymbolTypeId(DB.ForgeTypeId())
+        except Exception:
+            pass
+        field.SetFormatOptions(fmt)
+    except Exception:
+        pass
+
+
+def _formatar_cabecalho_tabela_eletrodos(schedule):
+    """Adiciona linha única de legenda abaixo do título explicando NE, ND e REF."""
+    try:
+        table_data = schedule.GetTableData()
+        header = table_data.GetSectionData(DB.SectionType.Header)
+        if header is None:
+            return
+
+        while header.NumberOfRows > 1:
+            header.RemoveRow(header.LastRowNumber)
+
+        first_row = header.FirstRowNumber
+        first_col = header.FirstColumnNumber
+        last_col = header.LastColumnNumber
+
+        row_idx = first_row + 1
+        header.InsertRow(row_idx)
+        header.SetCellText(
+            row_idx,
+            first_col,
+            u'(NE - Nível Estático), (ND - Nível Dinâmico), (REF - Referência: Nível Dinâmico + 10 m)',
+        )
+
+        try:
+            opts = DB.TableCellStyleOverrideOptions()
+            opts.HorizontalAlignment = True
+            opts.Bold = True
+            estilo_nota = DB.TableCellStyle()
+            estilo_nota.SetCellStyleOverrideOptions(opts)
+            estilo_nota.FontHorizontalAlignment = DB.HorizontalAlignmentStyle.Left
+            estilo_nota.IsFontBold = True
+            header.SetCellStyle(row_idx, first_col, estilo_nota)
+        except Exception:
+            pass
+
+        if last_col > first_col:
+            try:
+                header.MergeCells(DB.TableMergedCell(row_idx, first_col, row_idx, last_col))
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def criar_ou_atualizar_tabela_eletrodos():
+    """Cria ou atualiza a tabela exclusiva dos cabos dos eletrodos em Equipamentos elétricos.
+    Retorna (schedule, criada_agora, params_criados, avisos).
+    """
+    t, avisos = transacao(u'{} - Tabela Eletrodos'.format(NOME_FERRAMENTA))
+    t.Start()
+    try:
+        criados = garantir_parametros_eletrodos()
+        if criados:
+            doc.Regenerate()
+
+        schedule = None
+        for vs in DB.FilteredElementCollector(doc).OfClass(DB.ViewSchedule):
+            try:
+                if not vs.IsTemplate and vs.Name == NOME_TABELA_ELETRODOS:
+                    schedule = vs
+                    break
+            except Exception:
+                continue
+
+        criada_agora = schedule is None
+        if criada_agora:
+            schedule = DB.ViewSchedule.CreateSchedule(
+                doc, DB.ElementId(DB.BuiltInCategory.OST_ElectricalEquipment))
+            schedule.Name = NOME_TABELA_ELETRODOS
+
+        sched_def = schedule.Definition
+        sched_def.ClearFilters()
+        try:
+            sched_def.ClearSortGroupFields()
+        except Exception:
+            pass
+        for fid in list(sched_def.GetFieldOrder()):
+            sched_def.RemoveField(fid)
+
+        sched_def.ShowTitle = True
+        sched_def.ShowHeaders = True
+        sched_def.ShowGridLines = True
+        sched_def.IsItemized = True
+        if sched_def.ShowGrandTotal:
+            try:
+                sched_def.ShowGrandTotalTitle = False
+                sched_def.ShowGrandTotalCount = False
+            except Exception:
+                pass
+        sched_def.ShowGrandTotal = False
+
+        por_nome = {}
+        for sf in sched_def.GetSchedulableFields():
+            try:
+                por_nome[sf.GetName(doc)] = sf
+            except Exception:
+                pass
+
+        colunas = [
+            (por_nome.get(PARAM_TIPO_CABO), u'Tipo de Condutor', False, DB.ScheduleHorizontalAlignment.Left, 68.0),
+            (por_nome.get(PARAM_SECAO_CABO), u'Seção', False, DB.ScheduleHorizontalAlignment.Center, 22.0),
+            (por_nome.get(PARAM_CABO_NE), u'NE', True, DB.ScheduleHorizontalAlignment.Center, 24.0),
+            (por_nome.get(PARAM_CABO_ND), u'ND', True, DB.ScheduleHorizontalAlignment.Center, 24.0),
+            (por_nome.get(PARAM_CABO_REF), u'REF', True, DB.ScheduleHorizontalAlignment.Center, 24.0),
+            (por_nome.get(PARAM_CABO_TOTAL), u'Total', True, DB.ScheduleHorizontalAlignment.Center, 26.0),
+        ]
+
+        field_tipo = None
+        field_total = None
+        for idx, (sf, titulo, eh_metros, alinhamento, _) in enumerate(colunas):
+            if sf is None:
+                raise Exception(u'Campo "{}" indisponível para a tabela de Equipamentos elétricos.'.format(titulo))
+            field = sched_def.AddField(sf)
+            field.ColumnHeading = titulo
+            try:
+                field.HorizontalAlignment = alinhamento
+            except Exception:
+                pass
+            if eh_metros:
+                _configurar_formato_metros(field)
+            if idx == 0:
+                field_tipo = field
+            if sf == por_nome.get(PARAM_CABO_TOTAL):
+                field_total = field
+
+        if field_tipo is not None:
+            try:
+                sched_def.AddSortGroupField(
+                    DB.ScheduleSortGroupField(field_tipo.FieldId, DB.ScheduleSortOrder.Ascending))
+            except Exception:
+                pass
+
+        if field_total is not None:
+            sched_def.AddFilter(
+                DB.ScheduleFilter(field_total.FieldId, DB.ScheduleFilterType.GreaterThan, 0.0))
+
+        doc.Regenerate()
+
+        try:
+            body = schedule.GetTableData().GetSectionData(DB.SectionType.Body)
+            first_bcol = body.FirstColumnNumber
+            for idx, (_, _, _, _, largura_mm) in enumerate(colunas):
+                col_idx = first_bcol + idx
+                if body.IsValidColumnNumber(col_idx):
+                    body.SetColumnWidth(col_idx, largura_mm / 304.8)
+            row_hdr = body.FirstRowNumber
+            col_ini = first_bcol + 2
+            col_fim = first_bcol + 5
+            if schedule.CanGroupHeaders(row_hdr, col_ini, row_hdr, col_fim):
+                schedule.GroupHeaders(row_hdr, col_ini, row_hdr, col_fim, u'Comprimentos (m)')
+        except Exception:
+            pass
+
+        _formatar_cabecalho_tabela_eletrodos(schedule)
+
+        if t.Commit() != DB.TransactionStatus.Committed:
+            raise Exception(u'O Revit não confirmou a criação da tabela dos cabos dos eletrodos.')
+    except Exception:
+        if t.HasStarted() and not t.HasEnded():
+            t.RollBack()
+        raise
+    return schedule, criada_agora, criados, sorted(set(avisos.avisos))
+
+
+# ==========================================================================
 # 5. JANELA: MONTAGEM E DESTINO DA GRAVAÇÃO
 # ==========================================================================
 class Janela(forms.WPFWindow):
@@ -547,6 +1146,7 @@ class Janela(forms.WPFWindow):
         self.bombas = [b[1] for b in bombas]
         self.indice = inicial
         self.carregando = True
+        self.carregando_eletrodos = False
         self.trocando = False
         self.problemas = []
         self.gerado_bomba = None
@@ -561,6 +1161,7 @@ class Janela(forms.WPFWindow):
         self.CmbBomba.SelectedIndex = inicial
         self.definir_bomba(inicial)
         self.carregar_quadros()
+        self.carregar_campos_eletrodos(carregar_qcb=True)
 
         self.CmbBomba.SelectionChanged += self.bomba_mudou
         self.CmbFase.SelectionChanged += self.dado_mudou
@@ -574,6 +1175,10 @@ class Janela(forms.WPFWindow):
         self.BtnGravarTodos.Click += self.fazer_selecionados
         self.BtnCancelar.Click += lambda s, e: self.Close()
         self.CmbQuadroMarca.SelectionChanged += self.quadro_marca_mudou
+        self.TxtEletrodoPNE.TextChanged += self.eletrodo_dado_mudou
+        self.TxtEletrodoPND.TextChanged += self.eletrodo_dado_mudou
+        self.BtnGravarEletrodos.Click += self.gravar_eletrodos
+        self.BtnCriarTabelaEletrodos.Click += self.criar_tabela_eletrodos
         self.BtnResultadoOk.Click += lambda s, e: self.fechar_resultado()
         self.BtnResultadoSelecionar.Click += self.selecionar_problemas
         self.BtnResultadoTxt.Click += self.salvar_problemas_txt
@@ -587,8 +1192,9 @@ class Janela(forms.WPFWindow):
         self.ler_dados()
         self.gerar_textos(forcar=True)
         self.atualizar_bomba()
-        if getattr(self, 'quadros', None):
+        if getattr(self, 'quadros', None) is not None:
             self.atualizar_quadro()
+            self.carregar_campos_eletrodos(carregar_qcb=False)
 
     def bomba_mudou(self, sender, e):
         if self.trocando:
@@ -771,7 +1377,7 @@ class Janela(forms.WPFWindow):
         if not lista:
             motivo = u'Nenhum quadro compatível no projeto.'
             for ctrl in (self.CmbQuadros, self.TxtQuadroNovo, self.BtnGravarQuadro,
-                         self.CmbQuadroMarca):
+                         self.CmbQuadroMarca, self.BtnGravarEletrodos):
                 ctrl.IsEnabled = False
             self.TxtQuadroDestino.Visibility = Visibility.Visible   # aviso importante
             self.BtnGravarTodos.Content = u'Gravar Todos (Dados + Bomba)'
@@ -885,6 +1491,206 @@ class Janela(forms.WPFWindow):
             else:
                 self.selecionar_marca_quadro(val)
             self.gerar_textos()
+            self.carregar_campos_eletrodos(carregar_qcb=True)
+
+    # ---------------------------------------------------------------- cabos dos eletrodos
+    def carregar_campos_eletrodos(self, carregar_qcb=True):
+        """Se houver valores gravados no QCB, preenche PNE/PND e atualiza a prévia."""
+        self.carregando_eletrodos = True
+        try:
+            quadro = self.quadro_atual()
+            if carregar_qcb and quadro is not None:
+                p_ne = quadro.LookupParameter(PARAM_PROF_NE)
+                p_nd = quadro.LookupParameter(PARAM_PROF_ND)
+                if p_ne is not None and p_ne.HasValue and p_ne.AsDouble() > 0:
+                    val_ne = interno_para_metros(p_ne.AsDouble())
+                    self.TxtEletrodoPNE.Text = u'{:.6f}'.format(val_ne).rstrip(u'0').rstrip(u'.').replace(u'.', u',')
+                if p_nd is not None and p_nd.HasValue and p_nd.AsDouble() > 0:
+                    val_nd = interno_para_metros(p_nd.AsDouble())
+                    self.TxtEletrodoPND.Text = u'{:.6f}'.format(val_nd).rstrip(u'0').rstrip(u'.').replace(u'.', u',')
+        finally:
+            self.carregando_eletrodos = False
+        self.atualizar_previa_eletrodos()
+
+    def eletrodo_dado_mudou(self, sender, e):
+        if not getattr(self, 'carregando_eletrodos', False):
+            self.atualizar_previa_eletrodos()
+
+    def _mostrar_aviso_eletrodo(self, texto, eh_erro=False):
+        if not texto:
+            self.BrdEletrodoAviso.Visibility = Visibility.Collapsed
+            self.TxtEletrodoAviso.Text = u''
+            return
+        self.BrdEletrodoAviso.Visibility = Visibility.Visible
+        self.TxtEletrodoAviso.Text = texto
+        if eh_erro:
+            self.BrdEletrodoAviso.Background = brush('#F8D7DA')
+            self.BrdEletrodoAviso.BorderBrush = brush('#A93232')
+            self.TxtEletrodoAviso.Foreground = brush('#7A1C1C')
+        else:
+            self.BrdEletrodoAviso.Background = BG_SEM_VALOR
+            self.BrdEletrodoAviso.BorderBrush = BORDA_SEM_VALOR
+            self.TxtEletrodoAviso.Foreground = brush('#7A4B00')
+
+    def _limpar_previa_comprimentos(self):
+        self.TxtEletrodoPREF.Text = u'Profundidade de Referência (Nível Dinâmico + 10 m): —'
+        self.TxtEletrodoLNE.Text = u'Cabo Nível Estático (+5%): —'
+        self.TxtEletrodoLND.Text = u'Cabo Nível Dinâmico (+5%): —'
+        self.TxtEletrodoLREF.Text = u'Cabo Referência (+5%): —'
+        self.TxtEletrodoTotal.Text = u'Total (3 cabos): —'
+
+    def _avaliar_eletrodos(self, exigir_campos=False):
+        """Executa localização XY, validações e cálculo.
+        Retorna (resultado_dict, dh_m, metodo_loc, por_aproximacao, erro_msg).
+        """
+        quadro = self.quadro_atual()
+        bomba = getattr(self, 'element', None)
+        dh_m, metodo_loc, por_aprox, erro_loc = calcular_distancia_horizontal_qcb_poco(bomba, quadro)
+        if erro_loc:
+            return None, None, None, False, erro_loc
+
+        pbomba_m = ler_profundidade_bomba_metros(bomba)
+
+        t_pne = to_text(self.TxtEletrodoPNE.Text).strip()
+        t_pnd = to_text(self.TxtEletrodoPND.Text).strip()
+        if not exigir_campos and not t_pne and not t_pnd:
+            return None, dh_m, metodo_loc, por_aprox, None
+
+        res, erro_calc = calcular_cabos_eletrodos(t_pne, t_pnd, dh_m, pbomba_m)
+        return res, dh_m, metodo_loc, por_aprox, erro_calc
+
+    def atualizar_previa_eletrodos(self):
+        quadro = self.quadro_atual()
+        res, dh_m, metodo_loc, por_aprox, erro = self._avaliar_eletrodos(exigir_campos=False)
+
+        if dh_m is not None:
+            self.TxtEletrodoDH.Text = u'Distância horizontal (Quadro–Poço): {:.2f} m'.format(dh_m).replace(u'.', u',')
+            obs_aprox = u' (por aproximação)' if por_aprox else u''
+            self.TxtEletrodoMetodo.Text = u'Localização: {}{}'.format(metodo_loc, obs_aprox)
+        else:
+            self.TxtEletrodoDH.Text = u'Distância horizontal (Quadro–Poço): —'
+            self.TxtEletrodoMetodo.Text = u'Localização: indisponível'
+
+        if quadro is not None:
+            p_tot = quadro.LookupParameter(PARAM_CABO_TOTAL)
+            if p_tot is not None and p_tot.HasValue and p_tot.AsDouble() > 0:
+                tot_gravado = interno_para_metros(p_tot.AsDouble())
+                self.TxtEletrodoStatus.Text = u'Gravado no quadro: {:.2f} m (total).'.format(tot_gravado).replace(u'.', u',')
+            elif p_tot is None:
+                self.TxtEletrodoStatus.Text = u'Parâmetros serão criados no quadro ao gravar.'
+            else:
+                self.TxtEletrodoStatus.Text = u'Quadro ainda sem cabos de eletrodos gravados.'
+        else:
+            self.TxtEletrodoStatus.Text = u'Nenhum quadro compatível selecionado.'
+
+        if erro:
+            self._limpar_previa_comprimentos()
+            self._mostrar_aviso_eletrodo(erro, eh_erro=True)
+            return
+
+        if res is None:
+            self._limpar_previa_comprimentos()
+            if por_aprox:
+                self._mostrar_aviso_eletrodo(
+                    u'Conectores elétricos ausentes: cálculo será feito por aproximação pelos pontos de inserção.',
+                    eh_erro=False)
+            else:
+                self._mostrar_aviso_eletrodo(None)
+            return
+
+        self.TxtEletrodoPREF.Text = u'Profundidade de Referência (Nível Dinâmico + 10 m): {:.2f} m'.format(res['pref']).replace(u'.', u',')
+        self.TxtEletrodoLNE.Text = u'Cabo Nível Estático (+5%): {:.2f} m'.format(res['l_ne']).replace(u'.', u',')
+        self.TxtEletrodoLND.Text = u'Cabo Nível Dinâmico (+5%): {:.2f} m'.format(res['l_nd']).replace(u'.', u',')
+        self.TxtEletrodoLREF.Text = u'Cabo Referência (+5%): {:.2f} m'.format(res['l_ref']).replace(u'.', u',')
+        self.TxtEletrodoTotal.Text = u'Total (3 cabos): {:.2f} m'.format(res['l_total']).replace(u'.', u',')
+
+        if por_aprox:
+            self._mostrar_aviso_eletrodo(
+                u'Cálculo por aproximação: usando pontos de inserção das famílias (conector elétrico ausente).',
+                eh_erro=False)
+        else:
+            self._mostrar_aviso_eletrodo(None)
+
+    def gravar_eletrodos(self, sender, e):
+        res, dh_m, metodo_loc, por_aprox, erro = self._avaliar_eletrodos(exigir_campos=True)
+        if erro:
+            forms.alert(erro, title=u'Aviso')
+            return
+
+        quadro = self.quadro_atual()
+        bomba = getattr(self, 'element', None)
+        fmt_num = lambda v: u'{:.2f}'.format(v).replace(u'.', u',')
+        obs_aprox = u' (por aproximação)' if por_aprox else u''
+        resumo = (
+            u'Gravar cabos dos 3 eletrodos no quadro?\n\n'
+            u'Quadro: {qcb}\n'
+            u'Bomba: {bomba}\n'
+            u'Distância horizontal (Quadro–Poço): {dh} m [{metodo}{obs}]\n'
+            u'Nível Estático: {pne} m | Nível Dinâmico: {pnd} m | Referência: {pref} m\n\n'
+            u'Cabo Nível Estático (+5%): {lne} m\n'
+            u'Cabo Nível Dinâmico (+5%): {lnd} m\n'
+            u'Cabo Referência (+5%): {lref} m\n'
+            u'Total (3 cabos): {ltot} m\n'
+            u'Especificação: {sec} | {tipo}'
+        ).format(
+            qcb=to_text(self.CmbQuadros.SelectedItem),
+            bomba=identificacao_bomba_para_qcb(bomba),
+            dh=fmt_num(dh_m),
+            metodo=metodo_loc,
+            obs=obs_aprox,
+            pne=fmt_num(res['pne']),
+            pnd=fmt_num(res['pnd']),
+            pref=fmt_num(res['pref']),
+            lne=fmt_num(res['l_ne']),
+            lnd=fmt_num(res['l_nd']),
+            lref=fmt_num(res['l_ref']),
+            ltot=fmt_num(res['l_total']),
+            sec=res['secao'],
+            tipo=res['tipo'],
+        )
+
+        if not forms.alert(resumo, title=u'Confirmar', yes=True, no=True):
+            return
+
+        linhas = []
+        problemas = []
+        try:
+            criados, avisos = gravar_eletrodos_qcb(quadro, bomba, res, dh_m, metodo_loc)
+            linhas.append(u'Cabos dos eletrodos gravados no QCB (Total: {:.2f} m).'.format(res['l_total']).replace(u'.', u','))
+            if criados:
+                linhas.append(u'Parâmetros compartilhados criados/vinculados ({}): {}.'.format(
+                    len(criados), u', '.join(criados)))
+            if por_aprox:
+                linhas.append(u'Método de localização registrado: {} (por aproximação).'.format(metodo_loc))
+            else:
+                linhas.append(u'Método de localização registrado: {}.'.format(metodo_loc))
+            for a in avisos:
+                problemas.append((quadro, u'Aviso do Revit: ' + a))
+        except Exception as ex:
+            linhas.append(u'Cabos dos eletrodos: NÃO foram gravados. Veja o motivo na tabela.')
+            problemas.append((quadro, erro_amigavel(ex)))
+
+        self.atualizar_previa_eletrodos()
+        self.mostrar_resultado(linhas, problemas)
+
+    def criar_tabela_eletrodos(self, sender, e):
+        linhas = []
+        problemas = []
+        try:
+            schedule, criada_agora, criados, avisos = criar_ou_atualizar_tabela_eletrodos()
+            acao = u'criada' if criada_agora else u'atualizada'
+            linhas.append(u'Tabela "{}" {} com sucesso.'.format(schedule.Name, acao))
+            if criados:
+                linhas.append(u'Parâmetros compartilhados criados/vinculados ({}): {}.'.format(
+                    len(criados), u', '.join(criados)))
+            for a in avisos:
+                problemas.append((schedule, u'Aviso do Revit: ' + a))
+        except Exception as ex:
+            linhas.append(u'Não foi possível criar/atualizar a tabela dos eletrodos.')
+            problemas.append((None, erro_amigavel(ex)))
+
+        self.atualizar_previa_eletrodos()
+        self.mostrar_resultado(linhas, problemas)
 
     # ==========================================================================
     # 6. JANELA: GRAVAÇÃO E PAINEL DE RESULTADO
