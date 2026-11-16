@@ -29,6 +29,7 @@ Organização do arquivo:
 # 1. IMPORTAÇÕES E CONSTANTES
 # ==========================================================================
 import io
+import math
 import os
 import re
 import tempfile
@@ -523,13 +524,16 @@ def ponto_elemento(el):
 
 
 def calcular_distancia_metros(el1, el2):
-    """Retorna a distância euclidiana em metros entre dois elementos (1 pé = 0.3048 m)."""
+    """Retorna a distância em metros (planta + |ΔZ| com folga de 5%) entre dois elementos (1 pé = 0.3048 m)."""
     p1 = ponto_elemento(el1)
     p2 = ponto_elemento(el2)
     if p1 is None or p2 is None:
         return None
-    dist_pes = p1.DistanceTo(p2)
-    return dist_pes * 0.3048
+    dx = p2.X - p1.X
+    dy = p2.Y - p1.Y
+    dz = p2.Z - p1.Z
+    dist_calculada_pes = math.sqrt(dx * dx + dy * dy) + abs(dz)
+    return (dist_calculada_pes * 0.3048) * 1.05
 
 
 # ==========================================================================
