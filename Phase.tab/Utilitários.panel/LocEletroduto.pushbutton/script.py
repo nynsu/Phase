@@ -93,14 +93,13 @@ FILTRO_SITUACAO = {0: None, 1: [SIT_MUDAR], 2: [SIT_IGUAL], 3: []}
 
 # chave, propriedade, título no cabeçalho, título no menu, largura, visível ao abrir
 COLUNAS = [
-    ('tipo', 'Tipo', u'Tipo', u'Tipo', 240, True),
+    ('tipo', 'Tipo', u'Tipo', u'Tipo', 420, True),
     ('diametro', 'Diametro', u'Diâm. (mm)', u'Diâmetro', 80, True),
     ('elevacao', 'Elevacao', u'Elev. (m)', u'Elevação', 75, True),
     ('comprimento', 'Comprimento', u'Compr. (m)', u'Comprimento', 80, True),
     ('nivel', 'Nivel', u'Nível', u'Nível', 120, False),
-    ('atual', 'Atual', u'Valor atual', u'Valor atual', 150, True),
-    ('novo', 'Novo', u'Valor novo', u'Valor novo', 150, True),
-    ('situacao', 'Situacao', u'Situação', u'Situação', 110, True),
+    ('atual', 'Atual', u'Valor atual', u'Valor atual', 170, True),
+    ('novo', 'Novo', u'Valor novo', u'Valor novo', 190, True),
 ]
 
 # propriedade, título, largura (quadro de quantitativo)
@@ -272,8 +271,8 @@ def make_template(inner):
     return XamlReader.Parse(u'<DataTemplate {}>{}</DataTemplate>'.format(xmlns, inner))
 
 
-CELULA_TEXTO = (u'<TextBlock Text="{{Binding {prop}, Mode=OneWay}}" FontStyle="{{Binding Estilo, Mode=OneWay}}" '
-                u'Foreground="{{Binding Fg, Mode=OneWay}}" TextTrimming="CharacterEllipsis" '
+CELULA_TEXTO = (u'<TextBlock Text="{{Binding {prop}, Mode=OneWay}}" FontStyle="{{Binding {estilo}, Mode=OneWay}}" '
+                u'Foreground="{{Binding {fg}, Mode=OneWay}}" TextTrimming="CharacterEllipsis" '
                 u'VerticalAlignment="Center" Padding="2,1"/>')
 CELULA_QUANT = (u'<TextBlock Text="{{Binding {prop}, Mode=OneWay}}" FontWeight="{{Binding Peso, Mode=OneWay}}" '
                 u'TextAlignment="{alinhar}" TextTrimming="CharacterEllipsis" Padding="2,1"/>')
@@ -450,16 +449,22 @@ class Item(INotifyPropertyChanged):
         self.limite = limite
         self.resultado = classificar(self.texto_regra, self.z, limite) if self.bloqueio is None or \
             self.bloqueio[0] != SIT_ERRO else None
-        self.Novo = self.resultado or u'—'
         if self.bloqueio is not None:
             self.Situacao, self.motivo = self.bloqueio
+            self.Novo = self.Situacao
         elif self.resultado is None:
             self.Situacao = SIT_SEM_ELEVACAO
             self.motivo = u'O eletroduto não tem elevação para ser classificado.'
+            self.Novo = self.Situacao
         else:
             self.motivo = u''
-            self.Situacao = SIT_MUDAR if self.valor_atual != self.resultado else SIT_IGUAL
-        self.notificar('Novo', 'Situacao', 'Dica', 'Selecionavel', 'RowBrush', 'Fg', 'Estilo')
+            if self.valor_atual != self.resultado:
+                self.Situacao = SIT_MUDAR
+                self.Novo = self.resultado
+            else:
+                self.Situacao = SIT_IGUAL
+                self.Novo = SIT_IGUAL
+        self.notificar('Novo', 'Situacao', 'Dica', 'Selecionavel', 'RowBrush', 'Fg', 'Estilo', 'FgNovo', 'EstiloNovo')
 
     def marcar_alterado(self):
         self.alterado = True
@@ -484,6 +489,18 @@ class Item(INotifyPropertyChanged):
     @property
     def Estilo(self):
         return FontStyles.Normal if self.Selecionavel else FontStyles.Italic
+
+    @property
+    def EstiloNovo(self):
+        return FontStyles.Normal if self.Situacao == SIT_MUDAR else FontStyles.Italic
+
+    @property
+    def FgNovo(self):
+        if self.Situacao == SIT_MUDAR:
+            return Brushes.Black
+        if self.Situacao == SIT_IGUAL:
+            return COR_DICA
+        return FG_SOMENTE_LEITURA
 
     @property
     def Dica(self):
@@ -521,11 +538,17 @@ class LinhaQuantitativo(object):
 # ==========================================================================
 class Janela(forms.WPFWindow):
 
-    def __init__(self, itens):
+    def __init__(self, itens, selecionados=None):
         forms.WPFWindow.__init__(self, XAML_FILE)
         self._carregando = True
         self.itens = sorted(itens, key=lambda i: (natural_key(i.Tipo), i.diam_mm or 0, i.Chave))
-        self.marcados = set(i.Chave for i in self.itens if i.Selecionavel)   # tudo marcado ao abrir
+        selecionados = set(selecionados or [])
+        pre_marcados = set(i.Chave for i in self.itens if i.Selecionavel and i.Chave in selecionados)
+        if pre_marcados:
+            self.marcados = pre_marcados
+            self.ChkSomenteMarcados.IsChecked = True
+        else:
+            self.marcados = set(i.Chave for i in self.itens if i.Selecionavel)   # tudo marcado ao abrir
         self.limite = metros_para_interno(ALTURA_PADRAO)
         self.ocupado = False
         self.cancelar = False
@@ -540,12 +563,15 @@ class Janela(forms.WPFWindow):
         self.TxtAltura.Text = numero(ALTURA_PADRAO)
         self.montar_colunas()
         self.montar_menu_colunas()
+        self.montar_niveis()
         self.montar_quantitativo()
 
         # eventos - altura e filtros
         self.TxtAltura.KeyDown += self.altura_tecla
+        self.TxtAltura.TextChanged += lambda s, e: self.atualizar_altura(silencioso=True)
         self.TxtAltura.LostFocus += lambda s, e: self.atualizar_altura()
         self.TxtPesquisa.TextChanged += lambda s, e: self.aplicar_filtro()
+        self.CmbNivel.SelectionChanged += lambda s, e: self.aplicar_filtro()
         self.CmbSituacao.SelectionChanged += lambda s, e: self.aplicar_filtro()
         self.ChkSomenteMarcados.Checked += lambda s, e: self.aplicar_filtro()
         self.ChkSomenteMarcados.Unchecked += lambda s, e: self.aplicar_filtro()
@@ -553,12 +579,17 @@ class Janela(forms.WPFWindow):
         self.BtnMarcarVisiveis.Click += lambda s, e: self.LvItens.SelectAll()
         self.BtnDesmarcarVisiveis.Click += lambda s, e: self.LvItens.UnselectAll()
         self.BtnInverter.Click += self.inverter
+        self.BtnVerNoRevit.Click += self.ver_no_revit
         self.BtnColunas.Click += self.abrir_menu_colunas
         self.BrdEletrodutos.MouseLeftButtonUp += self.alternar_lista
         self.LvItens.SelectionChanged += self.selecao_mudou
+        self.LvItens.MouseDoubleClick += self.ver_item_no_revit
+        self.LvItens.SizeChanged += self.ajustar_largura_tipo
         self.LvQuantitativo.SelectionChanged += self.quantitativo_sem_selecao
         self.LvQuantitativo.PreviewMouseLeftButtonUp += self.quantitativo_click
+        self.LvQuantitativo.SizeChanged += self.ajustar_largura_quantitativo
         # eventos - rodapé e resultado
+        self.BtnLimparModelo.Click += self.limpar_modelo
         self.BtnGravar.Click += self.gravar
         self.BtnCancelar.Click += self.cancelar_click
         self.BtnCancelarDescartar.Click += self.cancelar_descartar_click
@@ -600,7 +631,9 @@ class Janela(forms.WPFWindow):
             col = GridViewColumn()
             col.Header = self.cabecalho_coluna(chave, titulo)
             col.Width = largura
-            col.CellTemplate = make_template(CELULA_TEXTO.format(prop=prop))
+            estilo_col = 'EstiloNovo' if chave == 'novo' else 'Estilo'
+            fg_col = 'FgNovo' if chave == 'novo' else 'Fg'
+            col.CellTemplate = make_template(CELULA_TEXTO.format(prop=prop, estilo=estilo_col, fg=fg_col))
             self.colunas[chave] = col
             self.visivel[chave] = visivel
         self.LvItens.View = self.gv
@@ -624,6 +657,19 @@ class Janela(forms.WPFWindow):
             chave = coluna[0]
             if self.visivel[chave]:
                 self.gv.Columns.Add(self.colunas[chave])
+        self.ajustar_largura_tipo()
+
+    def ajustar_largura_tipo(self, sender=None, e=None):
+        if not hasattr(self, 'colunas') or 'tipo' not in self.colunas:
+            return
+        largura_disp = self.LvItens.ActualWidth - 28
+        if largura_disp <= 0:
+            return
+        outras = self.col_selecao.Width
+        for chave, col in self.colunas.items():
+            if chave != 'tipo' and self.visivel.get(chave):
+                outras += col.Width
+        self.colunas['tipo'].Width = max(260.0, largura_disp - outras)
 
     def montar_menu_colunas(self):
         self.MenuColunas = ContextMenu()
@@ -646,12 +692,22 @@ class Janela(forms.WPFWindow):
         self.visivel[sender.Tag] = bool(sender.IsChecked)
         self.aplicar_colunas()
 
+    def montar_niveis(self):
+        niveis = sorted(
+            set(to_text(i.Nivel).strip() for i in self.itens if to_text(i.Nivel).strip()),
+            key=natural_key)
+        tem_vazio = any(not to_text(i.Nivel).strip() for i in self.itens)
+        opcoes = [u'Todos'] + niveis + ([u'(sem nível)'] if tem_vazio else [])
+        self.CmbNivel.ItemsSource = opcoes
+        self.CmbNivel.SelectedIndex = 0
+
     def montar_quantitativo(self):
         gv = GridView()
         nome = GridViewColumn()
         nome.Header = u'Tipo de eletroduto'
-        nome.Width = 400
+        nome.Width = 520
         nome.CellTemplate = make_template(CELULA_QUANT.format(prop='Nome', alinhar='Left'))
+        self.col_quant_nome = nome
         gv.Columns.Add(nome)
         estilo = self.estilo_cabecalho(HorizontalAlignment.Right)
         for prop, titulo, largura in COLUNAS_QUANT:
@@ -662,6 +718,15 @@ class Janela(forms.WPFWindow):
             col.CellTemplate = make_template(CELULA_QUANT.format(prop=prop, alinhar='Right'))
             gv.Columns.Add(col)
         self.LvQuantitativo.View = gv
+
+    def ajustar_largura_quantitativo(self, sender=None, e=None):
+        if not hasattr(self, 'col_quant_nome'):
+            return
+        largura_disp = self.LvQuantitativo.ActualWidth - 28
+        if largura_disp <= 0:
+            return
+        outras = sum(largura for _, _, largura in COLUNAS_QUANT)
+        self.col_quant_nome.Width = max(320.0, largura_disp - outras)
 
     def quantitativo_sem_selecao(self, sender, e):
         """O quadro só informa: nenhuma linha fica selecionada."""
@@ -716,14 +781,20 @@ class Janela(forms.WPFWindow):
             self.atualizar_altura()
             e.Handled = True
 
-    def atualizar_altura(self):
+    def atualizar_altura(self, silencioso=False):
         """Recalcula a lista e o quantitativo. Devolve False se a altura for inválida."""
+        if getattr(self, '_carregando', False):
+            return True
         altura = ler_altura(self.TxtAltura.Text)
         if altura is None:
-            self.TxtAlturaDica.Text = u'Valor inválido: digite uma altura maior que zero, como 3,00.'
-            self.TxtAlturaDica.Foreground = COR_ERRO
+            if silencioso:
+                self.TxtAlturaDica.Text = u'Digite uma altura maior que zero (ex.: 3,00) para recalcular.'
+                self.TxtAlturaDica.Foreground = COR_DICA
+            else:
+                self.TxtAlturaDica.Text = u'Valor inválido: digite uma altura maior que zero, como 3,00.'
+                self.TxtAlturaDica.Foreground = COR_ERRO
             return False
-        self.TxtAlturaDica.Text = u'Enter atualiza a coluna Valor novo e o quantitativo.'
+        self.TxtAlturaDica.Text = u'Atualiza automaticamente a coluna Valor novo e o quantitativo.'
         self.TxtAlturaDica.Foreground = COR_DICA
         self.limite = metros_para_interno(altura)
         for item in self.itens:
@@ -732,9 +803,16 @@ class Janela(forms.WPFWindow):
         return True
 
     # ---------------------------------------------------------------- filtros
-    def passa_filtro(self, item, texto, situacoes, so_marcados):
+    def passa_filtro(self, item, texto, nivel, situacoes, so_marcados):
         if so_marcados and item.Chave not in self.marcados:
             return False
+        if nivel and nivel != u'Todos':
+            nivel_item = to_text(item.Nivel).strip()
+            if nivel == u'(sem nível)':
+                if nivel_item:
+                    return False
+            elif nivel_item != nivel:
+                return False
         if situacoes is not None:
             if situacoes and item.Situacao not in situacoes:
                 return False
@@ -746,9 +824,10 @@ class Janela(forms.WPFWindow):
         if self._carregando:
             return
         texto = to_text(self.TxtPesquisa.Text).strip().lower()
+        nivel = to_text(self.CmbNivel.SelectedItem)
         situacoes = FILTRO_SITUACAO.get(self.CmbSituacao.SelectedIndex)
         so_marcados = is_checked(self.ChkSomenteMarcados)
-        visiveis = [i for i in self.itens if self.passa_filtro(i, texto, situacoes, so_marcados)]
+        visiveis = [i for i in self.itens if self.passa_filtro(i, texto, nivel, situacoes, so_marcados)]
         self._carregando = True
         try:
             self.LvItens.ItemsSource = visiveis
@@ -800,14 +879,40 @@ class Janela(forms.WPFWindow):
     def alvos(self):
         return [i for i in self.visiveis() if i.Selecionavel and i.Chave in self.marcados]
 
+    def ver_no_revit(self, sender, e):
+        alvos = self.alvos() or self.visiveis()
+        ids = List[DB.ElementId]()
+        for item in alvos:
+            if item.el is not None and item.el.IsValidObject:
+                ids.Add(item.el.Id)
+        uidoc.Selection.SetElementIds(ids)
+        if ids.Count:
+            self.BtnVerNoRevit.Content = u'{} no Revit ✓'.format(ids.Count)
+        else:
+            self.BtnVerNoRevit.Content = u'Nada para selecionar'
+
+    def ver_item_no_revit(self, sender, e):
+        linha = ItemsControl.ContainerFromElement(self.LvItens, e.OriginalSource)
+        item = linha.Content if linha is not None else None
+        if item is None or item.el is None or not item.el.IsValidObject:
+            return
+        ids = List[DB.ElementId]()
+        ids.Add(item.el.Id)
+        uidoc.Selection.SetElementIds(ids)
+        self.BtnVerNoRevit.Content = u'Id {} no Revit ✓'.format(item.Id)
+
     def atualizar_contagem(self):
         vis = self.visiveis()
         marcados = self.alvos()
         selecionaveis = len([i for i in vis if i.Selecionavel])
+        self.BtnVerNoRevit.Content = u'Ver no Revit'
         self.TxtContagem.Text = u'{} selecionado(s)  ·  {} listado(s)  ·  {} no total'.format(
             len(marcados), len(vis), len(self.itens))
+        vao_mudar = len([i for i in marcados if i.Situacao == SIT_MUDAR])
         bloqueados = len([i for i in self.itens if not i.Selecionavel])
         resumo = [u'{} selecionado(s)'.format(len(marcados))]
+        if marcados:
+            resumo.append(u'{} vão mudar'.format(vao_mudar) if vao_mudar else u'Tudo atualizado')
         if bloqueados:
             resumo.append(u'{} não pode(m) ser alterado(s)'.format(bloqueados))
         resumo.append(u'{} no total'.format(len(self.itens)))
@@ -874,6 +979,7 @@ class Janela(forms.WPFWindow):
         self.ocupado = ocupado
         self.PnlProgresso.Visibility = Visibility.Visible if ocupado else Visibility.Collapsed
         self.GrdCorpo.IsEnabled = not ocupado
+        self.BtnLimparModelo.IsEnabled = not ocupado
         self.BtnGravar.IsEnabled = not ocupado
         self.BtnFechar.IsEnabled = not ocupado
         vis = Visibility.Visible if ocupado else Visibility.Collapsed
@@ -889,6 +995,26 @@ class Janela(forms.WPFWindow):
                        title=u'Cancelar e descartar', yes=True, no=True):
             self.cancelar = True
             self.descartar = True
+
+    def limpar_modelo(self, sender, e):
+        alvos = self.alvos()
+        if not alvos:
+            forms.alert(u'Marque ao menos um eletroduto na lista de eletrodutos.', title=u'Aviso')
+            return
+        com_valor = [i for i in alvos if to_text(i.valor_atual).strip()]
+        if not com_valor:
+            forms.alert(u'Os eletrodutos marcados já estão com "{}" vazio.'.format(PARAM_INSTALACAO), title=u'Aviso')
+            return
+        resumo = {}
+        for item in com_valor:
+            v = to_text(item.valor_atual).strip()
+            resumo[v] = resumo.get(v, 0) + 1
+        linhas = [u'{}: {}'.format(valor, resumo[valor]) for valor in sorted(resumo.keys())]
+        if not forms.alert(u'Limpar (deixar vazio) "{}" em {} eletroduto(s) no Revit?\n\n{}'.format(
+                PARAM_INSTALACAO, len(com_valor), u'\n'.join(linhas)),
+                title=u'Confirmar limpeza', yes=True, no=True):
+            return
+        self.executar(alvos, com_valor, limpar=True)
 
     def gravar(self, sender, e):
         if not self.atualizar_altura():
@@ -912,7 +1038,7 @@ class Janela(forms.WPFWindow):
             return
         self.executar(alvos, mudar)
 
-    def executar(self, alvos, mudar):
+    def executar(self, alvos, mudar, limpar=False):
         inicio = time.time()
         self.cancelar = False
         self.descartar = False
@@ -923,25 +1049,28 @@ class Janela(forms.WPFWindow):
         total = len(mudar)
         erro_geral = False
         t = None
-        tg = DB.TransactionGroup(doc, NOME_FERRAMENTA)
+        nome_tx = u'{} - Limpar'.format(NOME_FERRAMENTA) if limpar else NOME_FERRAMENTA
+        tg = DB.TransactionGroup(doc, nome_tx)
         tg.Start()
         try:
-            t, avisos = transacao(NOME_FERRAMENTA)
+            t, avisos = transacao(nome_tx)
             t.Start()
             for n, item in enumerate(mudar, 1):
                 if self.cancelar:
                     break
+                valor_alvo = u'' if limpar else item.resultado
                 try:
                     p = item.el.LookupParameter(PARAM_INSTALACAO)
-                    if not p.Set(item.resultado):
-                        raise Exception(u'O Revit não aceitou o valor "{}".'.format(item.resultado))
+                    if not p.Set(valor_alvo):
+                        raise Exception(u'O Revit não aceitou o valor "{}".'.format(valor_alvo))
                     gravados.add(item.Chave)
                 except Exception as ex:
                     falhas.add(item.Chave)
                     problemas.append((item.el, to_text(ex)))
                 self.PbProgresso.Value = float(n) / total
                 if n % 10 == 0 or n == total:
-                    self.status(u'Gravando: {}/{}'.format(n, total))
+                    rotulo_prog = u'Limpando' if limpar else u'Gravando'
+                    self.status(u'{}: {}/{}'.format(rotulo_prog, n, total))
                     pump_ui()
             if t.Commit() != DB.TransactionStatus.Committed:
                 raise Exception(u'O Revit não confirmou a gravação.')
@@ -969,30 +1098,36 @@ class Janela(forms.WPFWindow):
             item.ler()
             if item.Chave in gravados:
                 item.marcar_alterado()
-        # Conferidos sem falha saem da marcação; os que falharam continuam marcados.
-        if not self.descartar and not erro_geral:
+        # Conferidos sem falha saem da marcação ao gravar; na limpeza mantemos marcados.
+        if not limpar and not self.descartar and not erro_geral:
             self.marcados -= gravados
             if not self.cancelar:
                 self.marcados -= set(i.Chave for i in alvos if i.Chave not in falhas)
         self.aplicar_filtro()
-        self.resultado_final(alvos, mudar, gravados, problemas, time.time() - inicio, erro_geral)
+        self.resultado_final(alvos, mudar, gravados, problemas, time.time() - inicio, erro_geral, limpar=limpar)
 
-    def resultado_final(self, alvos, mudar, gravados, problemas, tempo, erro_geral):
+    def resultado_final(self, alvos, mudar, gravados, problemas, tempo, erro_geral, limpar=False):
         if self.descartar:
             self.mostrar_resultado([u'Execução cancelada e descartada: nada foi alterado.'], problemas, True)
             return
         if erro_geral:
             self.mostrar_resultado([u'Nada foi alterado.'], problemas)
             return
-        linhas = [u'{} eletroduto(s) alterado(s).'.format(len(gravados))]
-        iguais = len(alvos) - len(mudar)
-        if iguais:
-            linhas.append(u'{} já estavam com o valor certo.'.format(iguais))
-        marcados_chaves = set(i.Chave for i in alvos)
-        desmarcados = len([i for i in self.itens
-                           if i.Situacao == SIT_MUDAR and i.Chave not in marcados_chaves])
-        if desmarcados and not self.cancelar:
-            linhas.append(u'{} iam mudar, mas estavam desmarcados.'.format(desmarcados))
+        if limpar:
+            linhas = [u'{} eletroduto(s) limpo(s) no Revit.'.format(len(gravados))]
+            iguais = len(alvos) - len(mudar)
+            if iguais:
+                linhas.append(u'{} já estavam vazios.'.format(iguais))
+        else:
+            linhas = [u'{} eletroduto(s) alterado(s).'.format(len(gravados))]
+            iguais = len(alvos) - len(mudar)
+            if iguais:
+                linhas.append(u'{} já estavam com o valor certo.'.format(iguais))
+            marcados_chaves = set(i.Chave for i in alvos)
+            desmarcados = len([i for i in self.itens
+                               if i.Situacao == SIT_MUDAR and i.Chave not in marcados_chaves])
+            if desmarcados and not self.cancelar:
+                linhas.append(u'{} iam mudar, mas estavam desmarcados.'.format(desmarcados))
         if self.cancelar:
             linhas.append(u'Cancelado pelo usuário (o que já tinha sido feito foi mantido).')
         linhas.append(u'Tempo: {} s'.format(numero(tempo)))
@@ -1099,7 +1234,8 @@ def main():
     if not eletrodutos:
         forms.alert(u'Nenhum eletroduto encontrado no projeto ativo.', exitscript=True)
     limite = metros_para_interno(ALTURA_PADRAO)
-    Janela([Item(el, limite) for el in eletrodutos]).ShowDialog()
+    selecionados = set(eid_value(el.Id) for el in revit.get_selection().elements)
+    Janela([Item(el, limite) for el in eletrodutos], selecionados=selecionados).ShowDialog()
 
 
 if __name__ == '__main__':

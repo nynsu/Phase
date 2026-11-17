@@ -1,7 +1,7 @@
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title=""
-        Width="1360" Height="620" MinWidth="1120" MinHeight="560"
+        Width="1410" Height="630" MinWidth="1180" MinHeight="560"
         WindowStartupLocation="CenterScreen" ResizeMode="CanResizeWithGrip"
         FontFamily="Segoe UI" FontSize="12" Foreground="#1E2A38"
         Background="#F4F6F9">
@@ -630,7 +630,7 @@
                 <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="310"/>
+                <ColumnDefinition Width="350"/>
             </Grid.ColumnDefinitions>
 
             <!-- Escolha da bomba -->
@@ -802,16 +802,16 @@
                     <!-- Entradas de profundidade -->
                     <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="115"/>
+                            <ColumnDefinition Width="128"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="30"/>
                             <RowDefinition Height="30"/>
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0" Text="Nível Estático:" VerticalAlignment="Center" ToolTip="Profundidade do nível estático (eletrodo superior), em metros, a partir da boca do poço"/>
+                        <TextBlock Grid.Row="0" Text="Nível Estático (m):" VerticalAlignment="Center" ToolTip="Profundidade do nível estático (eletrodo superior), em metros, a partir da boca do poço"/>
                         <TextBox Grid.Row="0" Grid.Column="1" x:Name="TxtEletrodoPNE" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Row="1" Text="Nível Dinâmico:" VerticalAlignment="Center" ToolTip="Profundidade do nível dinâmico (eletrodo inferior), em metros, a partir da boca do poço"/>
+                        <TextBlock Grid.Row="1" Text="Nível Dinâmico (m):" VerticalAlignment="Center" ToolTip="Profundidade do nível dinâmico (eletrodo inferior), em metros, a partir da boca do poço"/>
                         <TextBox Grid.Row="1" Grid.Column="1" x:Name="TxtEletrodoPND" VerticalAlignment="Center"/>
                     </Grid>
 
@@ -821,16 +821,18 @@
                     </Border>
 
                     <!-- Prévia do cálculo -->
-                    <Border Grid.Row="2" Background="#F7F9FB" BorderBrush="#D6DEE8" BorderThickness="1" CornerRadius="3" Padding="8,6" Margin="0,8,0,0">
+                    <Border Grid.Row="2" Background="#F7F9FB" BorderBrush="#D6DEE8" BorderThickness="1" CornerRadius="3" Padding="8,7" Margin="0,8,0,0">
                         <StackPanel>
                             <TextBlock x:Name="TxtEletrodoDH" Text="Distância horizontal (Quadro–Poço): —" FontSize="11" Foreground="#3B4453" TextWrapping="Wrap"/>
                             <TextBlock x:Name="TxtEletrodoMetodo" Text="Localização: —" FontSize="11" Foreground="#5A6778" TextWrapping="Wrap" Margin="0,2,0,0"/>
-                            <TextBlock x:Name="TxtEletrodoPREF" Text="Profundidade de Referência (Nível Dinâmico + 10 m): —" FontSize="11" Foreground="#3B4453" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                            <TextBlock x:Name="TxtEletrodoLNE" Text="Cabo Nível Estático (+5%): —" FontSize="11" Foreground="#1E2A38" Margin="0,4,0,0" TextWrapping="Wrap"/>
-                            <TextBlock x:Name="TxtEletrodoLND" Text="Cabo Nível Dinâmico (+5%): —" FontSize="11" Foreground="#1E2A38" Margin="0,1,0,0" TextWrapping="Wrap"/>
-                            <TextBlock x:Name="TxtEletrodoLREF" Text="Cabo Referência (+5%): —" FontSize="11" Foreground="#1E2A38" Margin="0,1,0,0" TextWrapping="Wrap"/>
-                            <TextBlock x:Name="TxtEletrodoTotal" Text="Total (3 cabos): —" FontSize="12" FontWeight="SemiBold" Foreground="#1F5FA8" Margin="0,4,0,0"/>
-                            <TextBlock x:Name="TxtEletrodoSpec" Text="2,5 mm² | CABO UNIPOLAR, HEPR, 0,6/1 kV" FontSize="10.5" Foreground="#5A6778" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            <TextBlock x:Name="TxtEletrodoPREF" Text="Profundidade de Referência (Nível Dinâmico + 10 m): —" FontSize="11" Foreground="#3B4453" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            <Border Height="1" Background="#DDE4EE" Margin="0,6,0,6"/>
+                            <TextBlock x:Name="TxtEletrodoLNE" Text="Cabo Nível Estático (+5%): —" FontSize="11" Foreground="#1E2A38" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtEletrodoLND" Text="Cabo Nível Dinâmico (+5%): —" FontSize="11" Foreground="#1E2A38" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="TxtEletrodoLREF" Text="Cabo Referência (+5%): —" FontSize="11" Foreground="#1E2A38" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                            <Border Height="1" Background="#DDE4EE" Margin="0,6,0,5"/>
+                            <TextBlock x:Name="TxtEletrodoTotal" Text="Total (3 cabos): —" FontSize="12" FontWeight="SemiBold" Foreground="#1F5FA8"/>
+                            <TextBlock x:Name="TxtEletrodoSpec" Text="2,5 mm² | CABO UNIPOLAR, HEPR, 0,6/1 kV" FontSize="10.5" Foreground="#5A6778" TextWrapping="Wrap" Margin="0,3,0,0"/>
                         </StackPanel>
                     </Border>
 
@@ -839,6 +841,7 @@
 
                     <!-- Ações -->
                     <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                        <Button x:Name="BtnZerarEletrodos" Content="Limpar do QCB" Visibility="Collapsed" ToolTip="Limpa (zera) os parâmetros de cabos dos eletrodos gravados no QCB no Revit"/>
                         <Button x:Name="BtnCriarTabelaEletrodos" Content="Tabela" ToolTip="Cria ou atualiza a tabela exclusiva de cabos dos eletrodos no Revit"/>
                         <Button x:Name="BtnGravarEletrodos" Content="Gravar cabos no QCB" Margin="0" ToolTip="Calcula, cria os parâmetros compartilhados se necessário e grava no QCB"/>
                     </StackPanel>
@@ -889,6 +892,8 @@
                         </ListView>
                     </DockPanel>
                     <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="16,12,16,14">
+                        <Button x:Name="BtnResultadoAbrirTabela" Content="Abrir tabela" Visibility="Collapsed"
+                                ToolTip="Fecha esta janela e abre a tabela de cabos dos eletrodos no Revit"/>
                         <Button x:Name="BtnResultadoSelecionar" Content="Selecionar no Revit" Visibility="Collapsed"
                                 ToolTip="Seleciona no Revit os elementos marcados na tabela (ou todos, se nenhum estiver marcado)"/>
                         <Button x:Name="BtnResultadoTxt" Content="Salvar tabela em TXT…" Visibility="Collapsed"

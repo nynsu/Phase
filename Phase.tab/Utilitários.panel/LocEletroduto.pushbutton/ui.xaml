@@ -45,6 +45,36 @@
         </Style>
         <Style x:Key="Secundario" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"/>
 
+        <!-- Limpar sutil: aparência secundária em repouso, destaque vermelho discreto no hover -->
+        <Style x:Key="LimparSutil" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1" CornerRadius="3" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+                            <ContentPresenter x:Name="Ct" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"
+                                              TextElement.Foreground="{TemplateBinding Foreground}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FDF2F2"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#A93232"/>
+                                <Setter TargetName="Ct" Property="TextElement.Foreground" Value="#A93232"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F8D7DA"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#8C2828"/>
+                                <Setter TargetName="Ct" Property="TextElement.Foreground" Value="#8C2828"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Principal (azul): ação padrão, botão da aba (nome da ação), "Fazer selecionados", "Aplicar" -->
         <Style x:Key="Principal" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Padding" Value="14,5"/>
@@ -635,7 +665,7 @@
                     <TextBox x:Name="TxtAltura" Text="3,00" Width="70" VerticalAlignment="Center"
                              ToolTip="Eletrodutos acima desta altura são classificados como embutidos na laje."/>
                     <TextBlock x:Name="TxtAlturaDica" Style="{StaticResource Dica}" Margin="10,0,0,0" VerticalAlignment="Center"
-                               Text="Enter atualiza a coluna Valor novo e o quantitativo."/>
+                               Text="Atualiza automaticamente a coluna Valor novo e o quantitativo."/>
                 </StackPanel>
             </Border>
 
@@ -669,20 +699,23 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="150"/>
+                            <ColumnDefinition Width="140"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="140"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="Pesquisar:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBox Grid.Column="1" x:Name="TxtPesquisa" Margin="0,0,10,0" ToolTip="Filtra pelo texto de qualquer coluna"/>
-                        <TextBlock Grid.Column="2" Text="Situação:" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <ComboBox Grid.Column="3" x:Name="CmbSituacao" SelectedIndex="0" Margin="0,0,10,0">
+                        <TextBlock Grid.Column="2" Text="Nível:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Grid.Column="3" x:Name="CmbNivel" SelectedIndex="0" Margin="0,0,10,0" ToolTip="Filtra os eletrodutos pelo nível de referência"/>
+                        <TextBlock Grid.Column="4" Text="Situação:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Grid.Column="5" x:Name="CmbSituacao" SelectedIndex="0" Margin="0,0,10,0">
                             <ComboBoxItem Content="Todas"/>
                             <ComboBoxItem Content="Vai mudar"/>
                             <ComboBoxItem Content="Sem mudança"/>
                             <ComboBoxItem Content="Não pode ser alterado"/>
                         </ComboBox>
-                        <CheckBox Grid.Column="4" x:Name="ChkSomenteMarcados" Content="Somente marcados" VerticalAlignment="Center"/>
+                        <CheckBox Grid.Column="6" x:Name="ChkSomenteMarcados" Content="Somente marcados" VerticalAlignment="Center" Margin="0"/>
                     </Grid>
 
                     <Grid Grid.Row="1" Margin="0,0,0,6">
@@ -701,6 +734,8 @@
                             <Button x:Name="BtnMarcarVisiveis" Content="Marcar visíveis"/>
                             <Button x:Name="BtnDesmarcarVisiveis" Content="Desmarcar visíveis"/>
                             <Button x:Name="BtnInverter" Content="Inverter"/>
+                            <Button x:Name="BtnVerNoRevit" Content="Ver no Revit"
+                                    ToolTip="Seleciona no modelo do Revit os eletrodutos marcados (dica: duplo clique em uma linha seleciona só ela)"/>
                             <Button x:Name="BtnColunas" Content="Colunas ▾" Margin="0"
                                     ToolTip="Escolha quais colunas aparecem na lista"/>
                         </StackPanel>
@@ -750,6 +785,8 @@
                         ToolTip="Para depois do item em andamento e mantém o que já foi feito."/>
                 <Button x:Name="BtnCancelarDescartar" Content="Cancelar e descartar" Visibility="Collapsed"
                         ToolTip="Para depois do item em andamento e desfaz tudo o que foi feito nesta execução."/>
+                <Button x:Name="BtnLimparModelo" Content="Limpar Eletroduto" Style="{StaticResource LimparSutil}"
+                        ToolTip="Limpa (deixa vazio) o parâmetro Tipo de Instalação nos eletrodutos marcados no Revit."/>
                 <Button x:Name="BtnGravar" Content="Gravar no Revit" Style="{StaticResource Principal}" MinWidth="140"/>
                 <Button x:Name="BtnFechar" Content="Fechar" Margin="0"/>
                 </StackPanel>

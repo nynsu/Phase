@@ -42,7 +42,7 @@ clr.AddReference('WindowsBase')
 
 import System
 from System.Collections.Generic import List
-from System.Windows import FontStyles, Visibility
+from System.Windows import FontStyles, FontWeights, Visibility
 from System.Windows.Controls import Control
 from System.Windows.Input import Key, Keyboard, ModifierKeys
 from System.Windows.Media import Brushes, Color, SolidColorBrush
@@ -83,6 +83,7 @@ ROTULO_FASE = u'Fase'
 INDICE_FASE = {u'1': 0, u'3': 1}    # Fase numérica <-> lista da janela
 
 NOME_TABELA_ELETRODOS = u'Quantitativo de Cabos - Eletrodos de Nível'
+MODELO_VISTA_TABELA_ELETRODOS = u'ELÉTRICO (GERAL) - TABELAS'
 SECAO_CABO_ELETRODOS = u'2,5 mm²'
 TIPO_CABO_ELETRODOS = u'CABO UNIPOLAR, HEPR, 0,6/1 kV'
 
@@ -956,6 +957,33 @@ def gravar_eletrodos_qcb(quadro, bomba, resultado, dh_m, metodo_loc):
     return criados, sorted(set(avisos.avisos))
 
 
+def zerar_eletrodos_qcb(quadro):
+    """Zera os parâmetros de cabos dos eletrodos já gravados no QCB."""
+    t, avisos = transacao(u'{} - Zerar Eletrodos'.format(NOME_FERRAMENTA))
+    t.Start()
+    try:
+        numericos = (
+            PARAM_CABO_NE, PARAM_CABO_ND, PARAM_CABO_REF, PARAM_CABO_TOTAL,
+            PARAM_PROF_NE, PARAM_PROF_ND, PARAM_PROF_REF, PARAM_DIST_H_POCO,
+        )
+        textos = (PARAM_SECAO_CABO, PARAM_TIPO_CABO, PARAM_METODO_LOC, PARAM_BOMBA_ASSOC)
+        for nome in numericos:
+            p = quadro.LookupParameter(nome)
+            if p is not None and not p.IsReadOnly:
+                p.Set(0.0)
+        for nome in textos:
+            p = quadro.LookupParameter(nome)
+            if p is not None and not p.IsReadOnly:
+                p.Set(u'')
+        if t.Commit() != DB.TransactionStatus.Committed:
+            raise Exception(u'O Revit não confirmou a limpeza dos cabos dos eletrodos.')
+    except Exception:
+        if t.HasStarted() and not t.HasEnded():
+            t.RollBack()
+        raise
+    return sorted(set(avisos.avisos))
+
+
 def _configurar_formato_metros(field):
     try:
         fmt = field.GetFormatOptions()
@@ -986,6 +1014,19 @@ def _formatar_cabecalho_tabela_eletrodos(schedule):
         first_col = header.FirstColumnNumber
         last_col = header.LastColumnNumber
 
+        # Remove a linha divisória inferior do título principal e lê seu tamanho de fonte
+        tam_titulo = 0.0
+        try:
+            estilo_titulo = header.GetTableCellStyle(first_row, first_col)
+            tam_titulo = estilo_titulo.TextSize
+            opts_titulo = estilo_titulo.GetCellStyleOverrideOptions()
+            opts_titulo.BorderBottomLineStyle = True
+            estilo_titulo.SetCellStyleOverrideOptions(opts_titulo)
+            estilo_titulo.BorderBottomLineStyle = DB.ElementId.InvalidElementId
+            header.SetCellStyle(first_row, first_col, estilo_titulo)
+        except Exception:
+            pass
+
         row_idx = first_row + 1
         header.InsertRow(row_idx)
         header.SetCellText(
@@ -994,30 +1035,71 @@ def _formatar_cabecalho_tabela_eletrodos(schedule):
             u'(NE - Nível Estático), (ND - Nível Dinâmico), (REF - Referência: Nível Dinâmico + 10 m)',
         )
 
-        try:
-            opts = DB.TableCellStyleOverrideOptions()
-            opts.HorizontalAlignment = True
-            opts.Bold = True
-            estilo_nota = DB.TableCellStyle()
-            estilo_nota.SetCellStyleOverrideOptions(opts)
-            estilo_nota.FontHorizontalAlignment = DB.HorizontalAlignmentStyle.Left
-            estilo_nota.IsFontBold = True
-            header.SetCellStyle(row_idx, first_col, estilo_nota)
-        except Exception:
-            pass
-
         if last_col > first_col:
             try:
                 header.MergeCells(DB.TableMergedCell(row_idx, first_col, row_idx, last_col))
             except Exception:
                 pass
+
+        try:
+            opts = DB.TableCellStyleOverrideOptions()
+            opts.HorizontalAlignment = True
+            opts.VerticalAlignment = True
+            opts.Bold = True
+            opts.BorderTopLineStyle = True
+            if tam_titulo and tam_titulo > 0:
+                opts.FontSize = True
+            estilo_nota = DB.TableCellStyle()
+            estilo_nota.SetCellStyleOverrideOptions(opts)
+            estilo_nota.FontHorizontalAlignment = DB.HorizontalAlignmentStyle.Left
+            estilo_nota.FontVerticalAlignment = DB.VerticalAlignmentStyle.Bottom
+            estilo_nota.IsFontBold = True
+            estilo_nota.BorderTopLineStyle = DB.ElementId.InvalidElementId
+            if tam_titulo and tam_titulo > 0:
+                estilo_nota.TextSize = tam_titulo * 0.7
+            header.SetCellStyle(row_idx, first_col, estilo_nota)
+        except Exception:
+            pass
+
+        # Centraliza horizontal e verticalmente os cabeçalhos "Tipo de Condutor" e "Seção"
+        try:
+            body = table_data.GetSectionData(DB.SectionType.Body)
+            if body is not None:
+                row_hdr = body.FirstRowNumber
+                first_bcol = body.FirstColumnNumber
+                for col_idx in (first_bcol, first_bcol + 1):
+                    if body.IsValidColumnNumber(col_idx):
+                        estilo_col = body.GetTableCellStyle(row_hdr, col_idx)
+                        opts_col = estilo_col.GetCellStyleOverrideOptions()
+                        opts_col.HorizontalAlignment = True
+                        opts_col.VerticalAlignment = True
+                        estilo_col.SetCellStyleOverrideOptions(opts_col)
+                        estilo_col.FontHorizontalAlignment = DB.HorizontalAlignmentStyle.Center
+                        estilo_col.FontVerticalAlignment = DB.VerticalAlignmentStyle.Middle
+                        body.SetCellStyle(row_hdr, col_idx, estilo_col)
+        except Exception:
+            pass
     except Exception:
         pass
 
 
+def _buscar_modelo_vista_tabela(nome_modelo):
+    """Procura um modelo de vista de tabela pelo nome (case-insensitive)."""
+    alvo = (nome_modelo or u'').strip().lower()
+    if not alvo:
+        return None
+    for vs in DB.FilteredElementCollector(doc).OfClass(DB.ViewSchedule):
+        try:
+            if vs.IsTemplate and (vs.Name or u'').strip().lower() == alvo:
+                return vs
+        except Exception:
+            continue
+    return None
+
+
 def criar_ou_atualizar_tabela_eletrodos():
     """Cria ou atualiza a tabela exclusiva dos cabos dos eletrodos em Equipamentos elétricos.
-    Retorna (schedule, criada_agora, params_criados, avisos).
+    Retorna (schedule, criada_agora, params_criados, avisos, modelo_aplicado).
     """
     t, avisos = transacao(u'{} - Tabela Eletrodos'.format(NOME_FERRAMENTA))
     t.Start()
@@ -1040,6 +1122,12 @@ def criar_ou_atualizar_tabela_eletrodos():
             schedule = DB.ViewSchedule.CreateSchedule(
                 doc, DB.ElementId(DB.BuiltInCategory.OST_ElectricalEquipment))
             schedule.Name = NOME_TABELA_ELETRODOS
+        elif schedule.ViewTemplateId != DB.ElementId.InvalidElementId:
+            # Limpa temporariamente o modelo para evitar bloqueio ao reconfigurar campos/filtros
+            try:
+                schedule.ViewTemplateId = DB.ElementId.InvalidElementId
+            except Exception:
+                pass
 
         sched_def = schedule.Definition
         sched_def.ClearFilters()
@@ -1124,6 +1212,16 @@ def criar_ou_atualizar_tabela_eletrodos():
         except Exception:
             pass
 
+        modelo_vista = _buscar_modelo_vista_tabela(MODELO_VISTA_TABELA_ELETRODOS)
+        modelo_aplicado = False
+        if modelo_vista is not None:
+            try:
+                if not hasattr(schedule, 'IsValidViewTemplate') or schedule.IsValidViewTemplate(modelo_vista.Id):
+                    schedule.ViewTemplateId = modelo_vista.Id
+                    modelo_aplicado = True
+            except Exception:
+                pass
+
         _formatar_cabecalho_tabela_eletrodos(schedule)
 
         if t.Commit() != DB.TransactionStatus.Committed:
@@ -1132,7 +1230,7 @@ def criar_ou_atualizar_tabela_eletrodos():
         if t.HasStarted() and not t.HasEnded():
             t.RollBack()
         raise
-    return schedule, criada_agora, criados, sorted(set(avisos.avisos))
+    return schedule, criada_agora, criados, sorted(set(avisos.avisos)), modelo_aplicado
 
 
 # ==========================================================================
@@ -1149,6 +1247,8 @@ class Janela(forms.WPFWindow):
         self.carregando_eletrodos = False
         self.trocando = False
         self.problemas = []
+        self.tabela_criada = None
+        self.abrir_tabela_ao_fechar = None
         self.gerado_bomba = None
         self.gerado_quadro = None
         self.campos = {'Tensao': self.TxtTensao, 'Potencia': self.TxtPotencia,
@@ -1178,7 +1278,9 @@ class Janela(forms.WPFWindow):
         self.TxtEletrodoPNE.TextChanged += self.eletrodo_dado_mudou
         self.TxtEletrodoPND.TextChanged += self.eletrodo_dado_mudou
         self.BtnGravarEletrodos.Click += self.gravar_eletrodos
+        self.BtnZerarEletrodos.Click += self.zerar_eletrodos
         self.BtnCriarTabelaEletrodos.Click += self.criar_tabela_eletrodos
+        self.BtnResultadoAbrirTabela.Click += self.abrir_tabela_resultado
         self.BtnResultadoOk.Click += lambda s, e: self.fechar_resultado()
         self.BtnResultadoSelecionar.Click += self.selecionar_problemas
         self.BtnResultadoTxt.Click += self.salvar_problemas_txt
@@ -1469,19 +1571,37 @@ class Janela(forms.WPFWindow):
             sugerida = self.marca_sugerida_quadro()
             self.selecionar_marca_quadro(sugerida)
 
+    def atualizar_rotulo_gravar_todos(self):
+        if not getattr(self, 'quadros', None):
+            self.BtnGravarTodos.Content = u'Gravar Todos (Dados + Bomba)'
+            return
+        tem_eletrodos = (
+            bool(to_text(self.TxtEletrodoPNE.Text).strip())
+            and bool(to_text(self.TxtEletrodoPND.Text).strip())
+        )
+        if tem_eletrodos:
+            self.BtnGravarTodos.Content = u'Gravar Todos (Dados + Bomba + Quadro + Eletrodos)'
+        else:
+            self.BtnGravarTodos.Content = u'Gravar Todos (Dados + Bomba + Quadro)'
+
     def atualizar_quadro(self):
         quadro = self.quadro_atual()
         if quadro is not None:
+            self.CmbQuadros.ToolTip = to_text(self.CmbQuadros.SelectedItem) or None
             self.mostrar_destino(quadro, False, self.TxtQuadroAtual, self.TxtQuadroDestino, u'quadro(s)')
-            
+
             # Exibir distância
             dist_m, eh_distante = self.info_distancia_quadro()
             if dist_m is not None:
                 classif = u'Distante (> 200m) → Relé de Subcarga' if eh_distante else u'Próxima (≤ 200m) → Relé de Nível'
                 self.TxtDistanciaQuadro.Text = u'Distância da bomba: {:.1f} m ({})'.format(dist_m, classif)
+                self.TxtDistanciaQuadro.Foreground = brush('#9A5B00') if eh_distante else brush('#1E5F4A')
+                self.TxtDistanciaQuadro.FontWeight = FontWeights.SemiBold
                 self.TxtDistanciaQuadro.Visibility = Visibility.Visible
             else:
                 self.TxtDistanciaQuadro.Text = u'Distância não calculada (adotado: Próxima)'
+                self.TxtDistanciaQuadro.Foreground = COR_DICA
+                self.TxtDistanciaQuadro.FontWeight = FontWeights.Normal
                 self.TxtDistanciaQuadro.Visibility = Visibility.Visible
 
             p_marca, _ = localizar_marca(quadro, False)
@@ -1562,6 +1682,7 @@ class Janela(forms.WPFWindow):
     def atualizar_previa_eletrodos(self):
         quadro = self.quadro_atual()
         res, dh_m, metodo_loc, por_aprox, erro = self._avaliar_eletrodos(exigir_campos=False)
+        _, eh_distante = self.info_distancia_quadro()
 
         if dh_m is not None:
             self.TxtEletrodoDH.Text = u'Distância horizontal (Quadro–Poço): {:.2f} m'.format(dh_m).replace(u'.', u',')
@@ -1571,17 +1692,45 @@ class Janela(forms.WPFWindow):
             self.TxtEletrodoDH.Text = u'Distância horizontal (Quadro–Poço): —'
             self.TxtEletrodoMetodo.Text = u'Localização: indisponível'
 
+        tot_gravado = 0.0
+        self.TxtEletrodoStatus.Foreground = COR_DICA
+        self.TxtEletrodoStatus.FontWeight = FontWeights.Normal
         if quadro is not None:
             p_tot = quadro.LookupParameter(PARAM_CABO_TOTAL)
             if p_tot is not None and p_tot.HasValue and p_tot.AsDouble() > 0:
                 tot_gravado = interno_para_metros(p_tot.AsDouble())
-                self.TxtEletrodoStatus.Text = u'Gravado no quadro: {:.2f} m (total).'.format(tot_gravado).replace(u'.', u',')
+                if res is not None and abs(res['l_total'] - tot_gravado) > 0.015:
+                    self.TxtEletrodoStatus.Text = u'Gravado: {:.2f} m → Alterado: {:.2f} m (não gravado)'.format(
+                        tot_gravado, res['l_total']).replace(u'.', u',')
+                    self.TxtEletrodoStatus.Foreground = brush('#9A5B00')
+                    self.TxtEletrodoStatus.FontWeight = FontWeights.SemiBold
+                else:
+                    self.TxtEletrodoStatus.Text = u'Gravado no quadro: {:.2f} m (total).'.format(tot_gravado).replace(u'.', u',')
             elif p_tot is None:
                 self.TxtEletrodoStatus.Text = u'Parâmetros serão criados no quadro ao gravar.'
             else:
-                self.TxtEletrodoStatus.Text = u'Quadro ainda sem cabos de eletrodos gravados.'
+                if res is not None:
+                    self.TxtEletrodoStatus.Text = u'Pronto para gravar no quadro ({:.2f} m).'.format(res['l_total']).replace(u'.', u',')
+                    self.TxtEletrodoStatus.Foreground = brush('#1F5FA8')
+                    self.TxtEletrodoStatus.FontWeight = FontWeights.SemiBold
+                else:
+                    self.TxtEletrodoStatus.Text = u'Quadro ainda sem cabos de eletrodos gravados.'
         else:
             self.TxtEletrodoStatus.Text = u'Nenhum quadro compatível selecionado.'
+
+        self.BtnZerarEletrodos.Visibility = (
+            Visibility.Visible if (quadro is not None and tot_gravado > 0) else Visibility.Collapsed
+        )
+        self.atualizar_rotulo_gravar_todos()
+
+        avisos_info = []
+        if eh_distante:
+            avisos_info.append(
+                u'Bomba distante (> 200 m → Relé de Subcarga): verifique se este poço utilizará eletrodos de nível.')
+        if por_aprox:
+            avisos_info.append(
+                u'Cálculo por aproximação pelos pontos de inserção das famílias (conector elétrico ausente).')
+        texto_info = u'\n'.join(avisos_info)
 
         if erro:
             self._limpar_previa_comprimentos()
@@ -1590,12 +1739,7 @@ class Janela(forms.WPFWindow):
 
         if res is None:
             self._limpar_previa_comprimentos()
-            if por_aprox:
-                self._mostrar_aviso_eletrodo(
-                    u'Conectores elétricos ausentes: cálculo será feito por aproximação pelos pontos de inserção.',
-                    eh_erro=False)
-            else:
-                self._mostrar_aviso_eletrodo(None)
+            self._mostrar_aviso_eletrodo(texto_info or None, eh_erro=False)
             return
 
         self.TxtEletrodoPREF.Text = u'Profundidade de Referência (Nível Dinâmico + 10 m): {:.2f} m'.format(res['pref']).replace(u'.', u',')
@@ -1604,12 +1748,7 @@ class Janela(forms.WPFWindow):
         self.TxtEletrodoLREF.Text = u'Cabo Referência (+5%): {:.2f} m'.format(res['l_ref']).replace(u'.', u',')
         self.TxtEletrodoTotal.Text = u'Total (3 cabos): {:.2f} m'.format(res['l_total']).replace(u'.', u',')
 
-        if por_aprox:
-            self._mostrar_aviso_eletrodo(
-                u'Cálculo por aproximação: usando pontos de inserção das famílias (conector elétrico ausente).',
-                eh_erro=False)
-        else:
-            self._mostrar_aviso_eletrodo(None)
+        self._mostrar_aviso_eletrodo(texto_info or None, eh_erro=False)
 
     def gravar_eletrodos(self, sender, e):
         res, dh_m, metodo_loc, por_aprox, erro = self._avaliar_eletrodos(exigir_campos=True)
@@ -1673,13 +1812,47 @@ class Janela(forms.WPFWindow):
         self.atualizar_previa_eletrodos()
         self.mostrar_resultado(linhas, problemas)
 
-    def criar_tabela_eletrodos(self, sender, e):
+    def zerar_eletrodos(self, sender, e):
+        quadro = self.quadro_atual()
+        if quadro is None:
+            return
+        if not forms.alert(
+                u'Zerar os parâmetros de cabos dos eletrodos gravados no quadro "{}"?'.format(
+                    to_text(self.CmbQuadros.SelectedItem)),
+                title=u'Confirmar', yes=True, no=True):
+            return
         linhas = []
         problemas = []
         try:
-            schedule, criada_agora, criados, avisos = criar_ou_atualizar_tabela_eletrodos()
+            avisos = zerar_eletrodos_qcb(quadro)
+            self.carregando_eletrodos = True
+            try:
+                self.TxtEletrodoPNE.Text = u''
+                self.TxtEletrodoPND.Text = u''
+            finally:
+                self.carregando_eletrodos = False
+            linhas.append(u'Cabos dos eletrodos zerados no QCB.')
+            for a in avisos:
+                problemas.append((quadro, u'Aviso do Revit: ' + a))
+        except Exception as ex:
+            linhas.append(u'Não foi possível zerar os cabos dos eletrodos.')
+            problemas.append((quadro, erro_amigavel(ex)))
+
+        self.atualizar_previa_eletrodos()
+        self.mostrar_resultado(linhas, problemas)
+
+    def criar_tabela_eletrodos(self, sender, e):
+        linhas = []
+        problemas = []
+        schedule = None
+        try:
+            schedule, criada_agora, criados, avisos, modelo_aplicado = criar_ou_atualizar_tabela_eletrodos()
             acao = u'criada' if criada_agora else u'atualizada'
             linhas.append(u'Tabela "{}" {} com sucesso.'.format(schedule.Name, acao))
+            if modelo_aplicado:
+                linhas.append(u'Modelo de vista "{}" aplicado.'.format(MODELO_VISTA_TABELA_ELETRODOS))
+            else:
+                linhas.append(u'Modelo de vista "{}" não encontrado no projeto (mantido sem modelo).'.format(MODELO_VISTA_TABELA_ELETRODOS))
             if criados:
                 linhas.append(u'Parâmetros compartilhados criados/vinculados ({}): {}.'.format(
                     len(criados), u', '.join(criados)))
@@ -1690,7 +1863,7 @@ class Janela(forms.WPFWindow):
             problemas.append((None, erro_amigavel(ex)))
 
         self.atualizar_previa_eletrodos()
-        self.mostrar_resultado(linhas, problemas)
+        self.mostrar_resultado(linhas, problemas, tabela=schedule)
 
     # ==========================================================================
     # 6. JANELA: GRAVAÇÃO E PAINEL DE RESULTADO
@@ -1712,6 +1885,9 @@ class Janela(forms.WPFWindow):
         funcoes = ['dados', 'bomba']
         if self.quadros:   # sem quadro compativel no projeto, grava so dados e bomba
             funcoes.append('quadro')
+            if (to_text(self.TxtEletrodoPNE.Text).strip()
+                    and to_text(self.TxtEletrodoPND.Text).strip()):
+                funcoes.append('eletrodos')
         self.executar(funcoes)
 
     def dados_funcao(self, funcao):
@@ -1739,6 +1915,11 @@ class Janela(forms.WPFWindow):
                 if funcoes == ['dados'] and not self.alteracoes():
                     return u'Nenhum dado foi alterado.'
                 continue
+            if funcao == 'eletrodos':
+                _, _, _, _, erro_el = self._avaliar_eletrodos(exigir_campos=True)
+                if erro_el:
+                    return erro_el
+                continue
             el, texto, _, nome = self.dados_funcao(funcao)
             if el is None:
                 return u'Escolha um quadro na lista de quadros.'
@@ -1761,6 +1942,16 @@ class Janela(forms.WPFWindow):
             partes.append(u'Dados da Bomba:\n{}'.format(u'\n'.join(nomes)))
         for funcao in funcoes:
             if funcao == 'dados':
+                continue
+            if funcao == 'eletrodos':
+                res_el, dh_el, met_el, _, _ = self._avaliar_eletrodos(exigir_campos=True)
+                fmt_num = lambda v: u'{:.2f}'.format(v).replace(u'.', u',')
+                partes.append(
+                    u'Cabos dos Eletrodos (QCB):\n'
+                    u'NE: {} m | ND: {} m | REF: {} m | Total: {} m (Dist. horiz.: {} m [{}])'.format(
+                        fmt_num(res_el['l_ne']), fmt_num(res_el['l_nd']),
+                        fmt_num(res_el['l_ref']), fmt_num(res_el['l_total']),
+                        fmt_num(dh_el), met_el))
                 continue
             el, texto, preferir_tipo, nome = self.dados_funcao(funcao)
             p, _ = localizar_descricao(el, preferir_tipo)
@@ -1794,10 +1985,30 @@ class Janela(forms.WPFWindow):
                         linhas.append(u'Dados: NÃO foram gravados. Veja o motivo na tabela.')
                         problemas.append((self.element, erro_amigavel(ex)))
                         # As descrições dependem dos dados: sem eles, nada mais é gravado
+                        nomes_falha = {'bomba': u'Bomba', 'quadro': u'Quadro', 'eletrodos': u'Cabos dos eletrodos'}
                         for resto in funcoes[funcoes.index('dados') + 1:]:
-                            nome = u'Bomba' if resto == 'bomba' else u'Quadro'
+                            nome = nomes_falha.get(resto, resto)
                             linhas.append(u'{}: não gravado, porque os Dados falharam.'.format(nome))
                         break
+                    continue
+                if funcao == 'eletrodos':
+                    quadro = self.quadro_atual()
+                    try:
+                        res_el, dh_el, met_el, _, erro_el = self._avaliar_eletrodos(exigir_campos=True)
+                        if erro_el:
+                            raise Exception(erro_el)
+                        criados_el, avisos_el = gravar_eletrodos_qcb(quadro, self.element, res_el, dh_el, met_el)
+                        gravou = True
+                        linhas.append(u'Cabos dos eletrodos: gravados no QCB ({:.2f} m total).'.format(
+                            res_el['l_total']).replace(u'.', u','))
+                        if criados_el:
+                            linhas.append(u'Parâmetros compartilhados criados/vinculados ({}): {}.'.format(
+                                len(criados_el), u', '.join(criados_el)))
+                        for aviso in avisos_el:
+                            problemas.append((quadro, u'Aviso do Revit: ' + aviso))
+                    except Exception as ex:
+                        linhas.append(u'Cabos dos eletrodos: NÃO foram gravados. Veja o motivo na tabela.')
+                        problemas.append((quadro, erro_amigavel(ex)))
                     continue
                 el, texto, preferir_tipo, nome = self.dados_funcao(funcao)
                 rotulo = nome if funcao == 'bomba' else u'Quadro {}'.format(to_text(self.CmbQuadros.SelectedItem))
@@ -1831,9 +2042,10 @@ class Janela(forms.WPFWindow):
         self.atualizar_quadro()
         self.mostrar_resultado(linhas, problemas)
 
-    def mostrar_resultado(self, linhas, problemas=None):
+    def mostrar_resultado(self, linhas, problemas=None, tabela=None):
         """Painel por cima da janela. problemas: [(elemento ou None, u'motivo'), ...]"""
         problemas = problemas or []
+        self.tabela_criada = tabela
         if problemas:
             self.BrdResultadoTopo.Background = brush('#A93232')
             self.TxtResultadoTitulo.Text = u'Processo concluído com problemas'
@@ -1849,6 +2061,8 @@ class Janela(forms.WPFWindow):
         self.BtnResultadoSelecionar.Content = u'Selecionar no Revit'
         self.BtnResultadoSelecionar.Visibility = (
             Visibility.Visible if any(p.eid is not None for p in self.problemas) else Visibility.Collapsed)
+        self.BtnResultadoAbrirTabela.Visibility = (
+            Visibility.Visible if tabela is not None else Visibility.Collapsed)
         self.TxtResultadoProblemas.Text = u'Não foi possível ({}):'.format(len(self.problemas))
         self.LvProblemas.ItemsSource = self.problemas
         self.PnlResultado.Visibility = Visibility.Visible
@@ -1856,6 +2070,12 @@ class Janela(forms.WPFWindow):
 
     def fechar_resultado(self):
         self.PnlResultado.Visibility = Visibility.Collapsed
+
+    def abrir_tabela_resultado(self, sender, e):
+        if self.tabela_criada is not None:
+            self.abrir_tabela_ao_fechar = self.tabela_criada
+        self.PnlResultado.Visibility = Visibility.Collapsed
+        self.Close()
 
     def selecionar_problemas(self, sender, e):
         linhas = list(self.LvProblemas.SelectedItems) or self.problemas
@@ -1915,7 +2135,13 @@ def main():
         if eid_value(el.Id) in selecionados:
             inicial = i
             break
-    Janela(bombas, inicial).ShowDialog()
+    janela = Janela(bombas, inicial)
+    janela.ShowDialog()
+    if janela.abrir_tabela_ao_fechar is not None:
+        try:
+            uidoc.ActiveView = janela.abrir_tabela_ao_fechar
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':
